@@ -30,6 +30,7 @@ import { createMapSourceLayers } from '../data/mapSources'
 import type { MapSourceId } from '../data/mapSources'
 import { cities, cityById, countries, countryById, journeyDays, routes, travelAtlasDisplay } from '../data/travelAtlas'
 import type { City, CityId, CountryId, SelectionMode } from '../types/travel'
+import type { GlobeQualityMode } from '../globeQuality'
 import { CesiumConstellationSky } from './CesiumConstellationSky'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
@@ -48,6 +49,7 @@ type CesiumAtlasGlobeProps = {
   resetVersion: number
   isNight: boolean
   showMapContent?: boolean
+  qualityMode?: GlobeQualityMode
   onSelectCity: (cityId: CityId) => void
 }
 
@@ -162,12 +164,16 @@ const setsMatch = <T,>(left: Set<T> | null, right: Set<T>) =>
   left.size === right.size &&
   [...right].every((item) => left.has(item))
 
-const configureViewer = (viewer: CesiumViewer) => {
+const configureViewer = (viewer: CesiumViewer, qualityMode: GlobeQualityMode = 'high') => {
   const devicePixelRatio = Math.max(1, window.devicePixelRatio || 1)
-  viewer.resolutionScale = Math.min(
+  const baseResolutionScale = Math.min(
     1,
     maxCesiumDevicePixelRatio / devicePixelRatio,
   )
+  // Reduced quality (mobile / coarse pointer): render at ~2/3 of the normal cap.
+  viewer.resolutionScale = qualityMode === 'reduced'
+    ? baseResolutionScale * 0.66
+    : baseResolutionScale
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = 120
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = maximumZoomDistance
   viewer.scene.globe.depthTestAgainstTerrain = true
@@ -252,6 +258,7 @@ export function CesiumAtlasGlobe({
   resetVersion,
   isNight,
   showMapContent = true,
+  qualityMode = 'high',
   onSelectCity,
 }: CesiumAtlasGlobeProps) {
   const viewerRef = useRef<CesiumComponentRef<CesiumViewer>>(null)
@@ -285,6 +292,10 @@ export function CesiumAtlasGlobe({
       ),
     [],
   )
+
+  // Sparse datasets (e.g. the 3-place spike) keep every marker labeled and
+  // slightly larger so places read clearly at world and country scale.
+  const sparseMarkerSet = mappedCities.length <= 12
 
   const journeyVisitCounts = useMemo(
     () =>
@@ -490,8 +501,8 @@ export function CesiumAtlasGlobe({
     const viewer = viewerRef.current?.cesiumElement
     if (!viewer) return
 
-    configureViewer(viewer)
-  }, [viewerReadyVersion])
+    configureViewer(viewer, qualityMode)
+  }, [qualityMode, viewerReadyVersion])
 
   useEffect(() => {
     if (cameraScale !== 'world') return undefined
@@ -792,8 +803,8 @@ export function CesiumAtlasGlobe({
         <Scene backgroundColor={Color.fromCssColorString(isNight ? '#010409' : '#dbeafe')} />
         <CesiumGlobe
           baseColor={Color.fromCssColorString(isNight ? '#07111f' : '#cbd5e1')}
-          dynamicAtmosphereLighting={isNight}
-          enableLighting={isNight}
+          dynamicAtmosphereLighting={isNight && qualityMode === 'high'}
+          enableLighting={isNight && qualityMode === 'high'}
           show={showMapContent}
           vertexShadowDarkness={isNight ? 0.48 : 0.3}
         />
@@ -814,6 +825,7 @@ export function CesiumAtlasGlobe({
           overviewHeight={cameraScaleStates.world.rangeOrHeight}
           overviewLat={overviewTarget.lat}
           overviewLng={overviewTarget.lng}
+          qualityMode={qualityMode}
           show={isNight}
         />
 
@@ -869,7 +881,7 @@ export function CesiumAtlasGlobe({
           const visitCount = journeyVisitCounts[city.id] ?? 1
           const isMuted =
             selectionMode !== 'overview' && !isSelected && !isCountryCity
-          const corePixelSize = isCountryCity ? 12 : 7
+          const corePixelSize = isCountryCity ? 12 : sparseMarkerSet ? 11 : 7
           const showHoverGlow = isHoveredCountryCity && !isSelected
 
           return (
@@ -903,7 +915,7 @@ export function CesiumAtlasGlobe({
                 outlineColor: Color.BLACK,
                 outlineWidth: 2,
                 pixelOffset: new Cartesian2(0, -28),
-                show: isSelected || isCountryCity,
+                show: sparseMarkerSet || isSelected || isCountryCity,
                 showBackground: true,
                 style: LabelStyle.FILL_AND_OUTLINE,
                 text: city.nameEn ?? city.nameZh ?? city.id,

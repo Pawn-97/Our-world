@@ -18,6 +18,8 @@ import {
 } from 'cesium'
 import { useCesium } from 'resium'
 
+import type { GlobeQualityMode } from '../globeQuality'
+
 type StarDefinition = {
   longitude: number
   latitude: number
@@ -400,6 +402,7 @@ type CesiumConstellationSkyProps = {
   overviewHeight: number
   overviewLat: number
   overviewLng: number
+  qualityMode?: GlobeQualityMode
   show: boolean
 }
 
@@ -408,6 +411,7 @@ export function CesiumConstellationSky({
   overviewHeight,
   overviewLat,
   overviewLng,
+  qualityMode = 'high',
   show,
 }: CesiumConstellationSkyProps) {
   const { viewer } = useCesium()
@@ -436,6 +440,9 @@ export function CesiumConstellationSky({
     })
 
     stars.forEach((star) => {
+      // Reduced quality: skip the faintest ambient stars (constellation and
+      // bright stars are all >= 3 px and always kept).
+      if (qualityMode === 'reduced' && star.pixelSize < 3) return
       pointCollection.add({
         color: starColor(star),
         disableDepthTestDistance: 0,
@@ -611,7 +618,7 @@ export function CesiumConstellationSky({
         },
       ]
 
-      Array.from({ length: auroraBankCount }, (_, bankIndex) => {
+      if (qualityMode !== 'reduced') Array.from({ length: auroraBankCount }, (_, bankIndex) => {
         const bankAngle = bankIndex * CesiumMath.TWO_PI / auroraBankCount
         const bankRotation = Matrix3.fromRotationZ(bankAngle, new Matrix3())
         const bankPhaseOffset = bankIndex * 0.53
@@ -769,7 +776,7 @@ export function CesiumConstellationSky({
         viewer.scene.primitives.remove(moonPrimitive)
       }
     }
-  }, [overviewHeight, overviewLat, overviewLng, show, viewer])
+  }, [overviewHeight, overviewLat, overviewLng, qualityMode, show, viewer])
 
   return null
 }

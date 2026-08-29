@@ -6,11 +6,14 @@ import { CountrySelector } from './components/CountrySelector'
 import { MapSourceSwitcher } from './components/MapSourceSwitcher'
 import { MouseControlGuide } from './components/MouseControlGuide'
 import { InfoCard } from './components/InfoCard'
+import { PlacePreviewSheet } from './components/PlacePreviewSheet'
 import { CityPhotoGalleryModal } from './components/CityPhotoGalleryModal'
 import type { CityPhotoGalleryRequest } from './components/CityPhotoGalleryModal'
 import { getInitialMapSource, rememberMapSource } from './data/mapSources'
 import type { MapSourceId } from './data/mapSources'
-import { cityById, getCitiesForCountry } from './data/travelAtlas'
+import { cityById, countryById, getCitiesForCountry } from './data/travelAtlas'
+import { detectGlobeQualityMode } from './globeQuality'
+import type { GlobeQualityMode } from './globeQuality'
 import type { CityId, CountryId, SelectionMode } from './types/travel'
 
 type ThemeMode = 'day' | 'night'
@@ -51,6 +54,7 @@ function App() {
   const [sidebarsOpen, setSidebarsOpen] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(sidebarMediaQuery).matches,
   )
+  const [qualityMode] = useState<GlobeQualityMode>(detectGlobeQualityMode)
   const activeTheme: ThemeMode = 'night'
   const imageryTuning = {
     ...imageryTuningDefaults[activeTheme],
@@ -118,6 +122,12 @@ function App() {
     setGlobeDistance(cityDistance)
   }
 
+  const closePlacePreview = () => {
+    setSelectedCityId(undefined)
+    setSelectionMode(selectedCountryId ? 'country' : 'overview')
+    setGlobeDistance(selectedCountryId ? countryDistance : overviewDistance)
+  }
+
   const changeGlobeDistance = (distance: number) => {
     if (Math.abs(distance - globeDistance) <= 0.001) return
 
@@ -147,6 +157,12 @@ function App() {
     setGlobeDistance(distance)
   }
 
+  // Mobile (sidebars collapsed below the 1100px breakpoint) shows a compact
+  // bottom-sheet preview instead of the hidden desktop side panels.
+  const mobilePlacePreview = !sidebarsOpen && selectionMode === 'city' && selectedCityId
+    ? cityById[selectedCityId]
+    : undefined
+
   return (
     <main className="theme-night relative h-[100dvh] overflow-hidden bg-[#010409] text-slate-950">
       <div className="app-background fixed inset-0 -z-10" />
@@ -171,6 +187,7 @@ function App() {
               globeScale={globeDistance}
               resetVersion={globeResetVersion}
               isNight={activeTheme === 'night'}
+              qualityMode={qualityMode}
               onSelectCity={selectCity}
             />
           </div>
@@ -247,6 +264,14 @@ function App() {
             />
           </div>
       </section>
+
+      {mobilePlacePreview ? (
+        <PlacePreviewSheet
+          city={mobilePlacePreview}
+          country={mobilePlacePreview.countryId ? countryById[mobilePlacePreview.countryId] : undefined}
+          onClose={closePlacePreview}
+        />
+      ) : null}
 
       {cityPhotoGallery ? (
         <CityPhotoGalleryModal
