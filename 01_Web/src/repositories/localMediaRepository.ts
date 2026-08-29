@@ -166,14 +166,19 @@ export const refreshLocalMediaCache = async (): Promise<void> => {
  * Dev-only initial prime: prefer the on-disk catalog/state over the bundled
  * snapshot so imports made outside the running dev server are visible without
  * a restart. Silently keeps the bundled snapshot when the read fails.
+ *
+ * The prime is idempotent and SHARED (same StrictMode double-effect race as
+ * primeLocalContentCache): every caller awaits one module-level promise and
+ * the middleware is hit at most once per page load.
  */
-export const primeLocalMediaCache = async (): Promise<void> => {
-  if (!import.meta.env.DEV) return
-  try {
-    await refreshLocalMediaCache()
-  } catch {
+let primePromise: Promise<void> | undefined
+
+export const primeLocalMediaCache = (): Promise<void> => {
+  if (!import.meta.env.DEV) return Promise.resolve()
+  primePromise ??= refreshLocalMediaCache().catch(() => {
     // Bundled catalog/state is the documented dev fallback.
-  }
+  })
+  return primePromise
 }
 
 export const createLocalMediaRepository = (): MediaRepository => {

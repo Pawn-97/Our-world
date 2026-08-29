@@ -44,12 +44,19 @@ export const refreshLocalContentCache = async (): Promise<void> => {
  * Dev-only initial prime: prefer on-disk content over the bundled snapshot so
  * external edits (e.g. hand-edited content/*.json) are visible without a dev
  * server restart. Silently keeps the bundled content when the read fails.
+ *
+ * The prime is idempotent and SHARED: every caller awaits the same module-level
+ * promise and the middleware is hit at most once per page load. This matters
+ * under React StrictMode, where the loading effect mounts twice — the second
+ * run must wait for the in-flight prime rather than skip it and read the
+ * stale bundled snapshot.
  */
-export const primeLocalContentCache = async (): Promise<void> => {
-  if (!import.meta.env.DEV) return
-  try {
-    await refreshLocalContentCache()
-  } catch {
+let primePromise: Promise<void> | undefined
+
+export const primeLocalContentCache = (): Promise<void> => {
+  if (!import.meta.env.DEV) return Promise.resolve()
+  primePromise ??= refreshLocalContentCache().catch(() => {
     // Bundled content is the documented dev fallback.
-  }
+  })
+  return primePromise
 }

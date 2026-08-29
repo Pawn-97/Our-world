@@ -3,7 +3,7 @@
 // media galleries and covers). Components receive plain props from here and
 // never import content data or data modules themselves.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   deriveCountryGroups,
   deriveRoutes,
@@ -145,9 +145,6 @@ const loadWorldContent = async (): Promise<WorldContent> => {
 export const useWorldContent = (): WorldContentState => {
   const [state, setState] = useState<WorldContentState>({ status: 'loading' })
   const [version, setVersion] = useState(0)
-  // The dev middleware prime (disk read-back) runs once per page load; later
-  // rebuilds triggered by refresh() already carry fresh caches.
-  const primedRef = useRef(false)
 
   // Preview semantics (Milestone 5): after a local-editor save, refresh
   // re-reads content AND the media catalog/curation state from disk (dev
@@ -161,10 +158,12 @@ export const useWorldContent = (): WorldContentState => {
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      if (!primedRef.current) {
-        primedRef.current = true
-        await Promise.all([primeLocalContentCache(), primeLocalMediaCache()])
-      }
+      // Both primes are shared module-level promises (idempotent, one request
+      // per page load). Every effect run — including React StrictMode's
+      // double-mount — awaits the SAME in-flight prime before reading the
+      // caches, so the view model can never be built from the stale bundled
+      // snapshot while the prime is still in flight.
+      await Promise.all([primeLocalContentCache(), primeLocalMediaCache()])
       return loadWorldContent()
     }
     load()
