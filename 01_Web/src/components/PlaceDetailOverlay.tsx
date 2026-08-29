@@ -516,7 +516,7 @@ export function PlaceDetailOverlay({
               计划 · Plans
             </h2>
             <div className="mt-4 rounded-3xl border border-dashed border-white/14 bg-white/[0.04] p-5 text-sm leading-6 text-slate-400">
-              计划日期：待定。确定行程后，在 content/visits.json 里添加一条 planned visit。
+              计划日期：待定。行程确定后会显示在这里。
             </div>
           </section>
         ) : null}

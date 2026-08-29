@@ -186,6 +186,14 @@ const cameraScaleStates: Record<
   street: { rangeOrHeight: 3_000, pitch: -55, duration: 1.2 },
 }
 
+// Label declutter (M7): beyond this camera height place markers collapse to
+// bare dots so dense clusters (East China, Malaysia) don't overlap at world
+// scale. The show/hide pair adds ~10% hysteresis so inertia zoom doesn't
+// flicker labels at the boundary. Selected or group-hovered places always
+// keep their label regardless of height.
+const labelHideCameraHeight = 6_000_000
+const labelShowCameraHeight = 5_400_000
+
 const cameraScaleForGlobeScale = (scale: number): CameraScale => {
   if (scale < 1.15) return 'street'
   if (scale < 1.68) return 'city'
@@ -346,6 +354,9 @@ export function CesiumAtlasGlobe({
   const [focusOffset, setFocusOffset] = useState({ x: 0, y: 0 })
   const [visiblePlaceIds, setVisiblePlaceIds] = useState<Set<PlaceId> | null>(null)
   const [visibleRouteIds, setVisibleRouteIds] = useState<Set<string> | null>(null)
+  // Far camera heights hide place labels (dots only); updated by the same
+  // camera listeners that drive hemisphere culling.
+  const [labelsHiddenByHeight, setLabelsHiddenByHeight] = useState(true)
   const countryGroupById = useMemo(
     () => new Map(countryGroups.map((group) => [group.id, group])),
     [countryGroups],
@@ -370,8 +381,9 @@ export function CesiumAtlasGlobe({
     [],
   )
 
-  // Sparse datasets (e.g. the 3-place spike) keep every marker labeled and
-  // slightly larger so places read clearly at world and country scale.
+  // Sparse datasets (e.g. the 3-place spike) keep every marker labeled
+  // (subject to the camera-height declutter above) and slightly larger so
+  // places read clearly at country scale and below.
   const sparseMarkerSet = places.length <= 12
   // Coarse pointers (reduced quality mode) need bigger tap targets.
   const markerSizeBoost = qualityMode === 'reduced' ? 8 : 0
@@ -610,6 +622,12 @@ export function CesiumAtlasGlobe({
 
     const updateVisibleHemisphere = () => {
       const cameraPosition = viewer.camera.positionWC
+      const cameraHeight = viewer.camera.positionCartographic.height
+      setLabelsHiddenByHeight((current) =>
+        current
+          ? cameraHeight > labelShowCameraHeight
+          : cameraHeight > labelHideCameraHeight,
+      )
       const nextPlaceIds = new Set(
         places
           .filter((place) =>
@@ -967,7 +985,10 @@ export function CesiumAtlasGlobe({
                 outlineColor: Color.BLACK,
                 outlineWidth: 2,
                 pixelOffset: new Cartesian2(0, -28),
-                show: sparseMarkerSet || isSelected || isGroupPlace,
+                show:
+                  isSelected ||
+                  isHoveredGroupPlace ||
+                  (!labelsHiddenByHeight && (sparseMarkerSet || isGroupPlace)),
                 showBackground: true,
                 style: LabelStyle.FILL_AND_OUTLINE,
                 text: place.nameEn ?? place.name,
