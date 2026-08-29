@@ -46,6 +46,26 @@ npm run privacy:check
 npm run media:check
 ```
 
+## 发布（GitHub Pages）
+
+仓库内置 [.github/workflows/deploy.yml](.github/workflows/deploy.yml)：push 到 `main` 后自动跑完整验证链（lint → typecheck → test → validate → privacy:check → media:check → build → dist 自检），任何一步失败都会阻断发布；全部通过后经 `upload-pages-artifact` + `deploy-pages` 发布到 Pages。
+
+首次发布需要的手工步骤（只做一次）：
+
+1. 在 GitHub 创建仓库并 push（`git remote add origin … && git push -u origin main`）。
+2. 仓库 **Settings → Pages → Source** 选择 **GitHub Actions**。
+3. 可选密钥（**Settings → Secrets and variables → Actions**）：
+   - `VITE_CESIUM_ION_TOKEN` — Cesium ion 在线影像令牌；不配置则使用内置低清离线影像，站点照常工作。
+   - `VITE_TIANDITU_TOKEN` — 天地图影像密钥（可选）。
+   - 真实令牌只存在于 Actions secrets，绝不写入任何被跟踪的文件。
+4. push 到 `main` 即触发发布；站点地址为 `https://<用户名>.github.io/<仓库名>/`（子路径由 workflow 自动注入 `BASE_PATH`，无需手工配置）。
+
+其他说明：
+
+- **自定义域名或根路径站点**（如 `<user>.github.io` 用户主页仓库）：编辑 workflow，删除 `BASE_PATH` 两行环境变量即可，构建默认 `/`。
+- 本地验证子路径构建：`cd 01_Web && BASE_PATH=/our-world/ npm run build && BASE_PATH=/our-world/ npm run dist:check`。
+- `npm run dist:check` 是构建产物冒烟检查：index.html 引用的资产都存在且带正确 base 前缀、Cesium 运行时资源齐全、内容媒体已发布、产物中没有本地编辑器端点。
+
 ## 致谢与许可
 
 本项目基于 [StarMap](https://github.com/Aisland-SJL/StarMap)（MIT License，作者 Aisland-SJL）改造。上游原始文档保存在 `03_Reference/starmap-upstream/`，许可证见 [LICENSE](LICENSE)。

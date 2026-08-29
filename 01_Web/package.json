@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/fix-dist-base.mjs",
+    "dist:check": "node scripts/check-dist.mjs",
     "lint": "eslint src scripts vite.config.ts",
     "media:check": "node scripts/import-media.mjs",
     "media:import": "node scripts/import-media.mjs --apply",

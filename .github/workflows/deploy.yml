@@ -1,0 +1,95 @@
+# Our World — GitHub Pages publishing (Milestone 6).
+#
+# Push to main runs the full local verification chain (lint → typecheck →
+# test → content validation → privacy audit → media preflight → production
+# build → dist integrity check); any failure blocks deployment. The static
+# dist/ is published to GitHub Pages via upload-pages-artifact + deploy-pages.
+#
+# Required one-time setup (see README.md "发布 / Publishing"):
+#   1. Repository Settings → Pages → Source = "GitHub Actions".
+#   2. Secrets: VITE_CESIUM_ION_TOKEN (optional; empty = bundled offline
+#      imagery), VITE_TIANDITU_TOKEN (optional). Real tokens never enter the
+#      repository — only Actions secrets.
+#
+# The site deploys to https://<user>.github.io/<repo>/ — BASE_PATH is derived
+# from the repository name automatically. For a custom domain or user/organization
+# site served at the root, remove the BASE_PATH env line (default '/').
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push supersedes an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 01_Web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: 01_Web/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Content validation
+        run: npm run validate
+
+      - name: Privacy audit
+        run: npm run privacy:check
+
+      - name: Media preflight
+        run: npm run media:check
+
+      - name: Production build
+        run: npm run build
+        env:
+          # Project-site sub-path derived from the repository name.
+          BASE_PATH: /${{ github.event.repository.name }}/
+          # Tokens come from Actions secrets only; never from the repository.
+          VITE_CESIUM_ION_TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN }}
+          VITE_TIANDITU_TOKEN: ${{ secrets.VITE_TIANDITU_TOKEN }}
+
+      - name: Dist integrity check
+        run: npm run dist:check
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: 01_Web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
