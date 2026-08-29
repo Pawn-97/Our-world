@@ -7,7 +7,7 @@ import worldJson from '../../content/world.json'
 import placesJson from '../../content/places.json'
 import visitsJson from '../../content/visits.json'
 import memoriesJson from '../../content/memories.json'
-import { orderVisitsChronologically } from '../domain/viewModel'
+import { orderMemoriesChronologically, orderVisitsChronologically } from '../domain/viewModel'
 import type {
   Memory,
   Place,
@@ -133,6 +133,8 @@ export const parseMemory = (value: unknown): Memory => {
     title: optionalString(value.title, `${label}.title`),
     body: optionalString(value.body, `${label}.body`),
     date: optionalString(value.date, `${label}.date`),
+    time: optionalString(value.time, `${label}.time`),
+    locationName: optionalString(value.locationName, `${label}.locationName`),
     latitude: value.latitude === undefined ? undefined : requireNumber(value.latitude, `${label}.latitude`),
     longitude: value.longitude === undefined ? undefined : requireNumber(value.longitude, `${label}.longitude`),
     mediaIds: value.mediaIds,
@@ -169,10 +171,7 @@ export const createLocalVisitRepository = (): VisitRepository => {
   }
 }
 
-const orderMemories = (memories: Memory[]): Memory[] =>
-  [...memories].sort((left, right) =>
-    `${left.date ?? '9999'}:${left.id}`.localeCompare(`${right.date ?? '9999'}:${right.id}`),
-  )
+const orderMemories = orderMemoriesChronologically
 
 export const createLocalMemoryRepository = (): MemoryRepository => {
   const memories = orderMemories(parseList(memoriesJson, parseMemory, 'memories.json'))

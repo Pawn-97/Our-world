@@ -3,6 +3,9 @@
 
 import type {
   CountryGroupId,
+  Media,
+  MediaId,
+  Memory,
   Place,
   PlaceId,
   Visit,
@@ -108,6 +111,36 @@ export const latestVisitDate = (visits: Visit[]): string | undefined => {
     .filter((date): date is string => Boolean(date))
     .sort()
   return dates[dates.length - 1]
+}
+
+/** Memories sorted for the timeline: date, then time-of-day, then id. */
+export const orderMemoriesChronologically = (memories: Memory[]): Memory[] =>
+  [...memories].sort((left, right) =>
+    `${left.date ?? '9999'}:${left.time ?? '99'}:${left.id}`
+      .localeCompare(`${right.date ?? '9999'}:${right.time ?? '99'}:${right.id}`),
+  )
+
+/**
+ * Photos attached to memories, in memory order, deduplicated by media id.
+ * Unknown media ids are skipped so a dangling reference never breaks the UI
+ * (the content validator reports them pre-build).
+ */
+export const collectMemoryMedia = (
+  memories: Memory[],
+  mediaById: Readonly<Record<MediaId, Media | undefined>>,
+): Media[] => {
+  const seen = new Set<MediaId>()
+  const collected: Media[] = []
+  for (const memory of memories) {
+    for (const mediaId of memory.mediaIds) {
+      if (seen.has(mediaId)) continue
+      const media = mediaById[mediaId]
+      if (!media) continue
+      seen.add(mediaId)
+      collected.push(media)
+    }
+  }
+  return collected
 }
 
 const visitBoundaryDates = (visit: Visit): string[] =>

@@ -203,4 +203,26 @@ describe('validateContent', () => {
     const errors = validateContent(content)
     expect(errors.some((error) => error.includes('wishlistReason'))).toBe(true)
   })
+
+  it('accepts an activity memory with time and location tags', () => {
+    const content = validContent()
+    content.memories[0].type = 'activity'
+    content.memories[0].time = '07:40'
+    content.memories[0].locationName = '浅草寺'
+    expect(validateContent(content)).toEqual([])
+  })
+
+  it('fails on a malformed memory time', () => {
+    const content = validContent()
+    content.memories[0].time = '7pm'
+    const errors = validateContent(content)
+    expect(errors.some((error) => error.includes('must be HH:MM'))).toBe(true)
+  })
+
+  it('fails on an empty memory locationName', () => {
+    const content = validContent()
+    content.memories[0].locationName = '  '
+    const errors = validateContent(content)
+    expect(errors.some((error) => error.includes('locationName'))).toBe(true)
+  })
 })

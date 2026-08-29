@@ -18,6 +18,7 @@ import type {
   Media,
   MediaId,
   Memory,
+  MemoryId,
   OverviewTarget,
   Place,
   PlaceId,
@@ -45,6 +46,8 @@ export type WorldContent = {
   visitById: Record<VisitId, Visit>
   memoriesByVisitId: Record<VisitId, Memory[]>
   memoriesByPlaceId: Record<PlaceId, Memory[]>
+  memoryById: Record<MemoryId, Memory>
+  mediaById: Record<MediaId, Media>
   mediaByPlaceId: Record<PlaceId, Media[]>
   coverByPlaceId: Record<PlaceId, Media | undefined>
   hiddenMediaIdsByPlaceId: Record<PlaceId, MediaId[]>
@@ -91,6 +94,7 @@ const loadWorldContent = async (): Promise<WorldContent> => {
   const mediaLists = await Promise.all(places.map((place) => mediaRepository.listForPlace(place.id)))
   const covers = await Promise.all(places.map((place) => mediaRepository.getCoverForPlace(place)))
   const hiddenIdLists = await Promise.all(places.map((place) => mediaRepository.listHiddenIdsForPlace(place.id)))
+  const allMedia = await mediaRepository.list()
   const mediaByPlaceId: Record<PlaceId, Media[]> = {}
   const coverByPlaceId: Record<PlaceId, Media | undefined> = {}
   const hiddenMediaIdsByPlaceId: Record<PlaceId, MediaId[]> = {}
@@ -112,6 +116,8 @@ const loadWorldContent = async (): Promise<WorldContent> => {
     visitById: indexBy(visits, (visit) => visit.id),
     memoriesByVisitId,
     memoriesByPlaceId,
+    memoryById: indexBy(memories, (memory) => memory.id),
+    mediaById: indexBy(allMedia, (media) => media.id),
     mediaByPlaceId,
     coverByPlaceId,
     hiddenMediaIdsByPlaceId,

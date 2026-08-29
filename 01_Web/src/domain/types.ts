@@ -89,6 +89,10 @@ export type Memory = {
   body?: string
   /** YYYY-MM-DD or YYYY-MM. */
   date?: string
+  /** HH:MM (24h) — time-of-day tag, mainly for activities. */
+  time?: string
+  /** Short human place label (e.g. "目黑川"), mainly for activities. */
+  locationName?: string
   latitude?: number
   longitude?: number
   mediaIds: MediaId[]
@@ -129,4 +133,10 @@ export const placeStatusLabels: Record<PlaceStatus, string> = {
 export const visitStatusLabels: Record<VisitStatus, string> = {
   completed: '已完成',
   planned: '计划中',
+}
+
+export const memoryTypeLabels: Record<MemoryType, string> = {
+  note: '笔记',
+  activity: '活动',
+  photo: '照片',
 }

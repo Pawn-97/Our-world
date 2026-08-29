@@ -187,6 +187,12 @@ const validateMemories = (errors, memories, visitIds, mediaIds) => {
       errors.push(`${label}: type "${memory.type}" must be one of ${[...MEMORY_TYPES].join(', ')}.`)
     }
     checkOptionalDate(errors, memory, 'date', label)
+    if (memory.time !== undefined && !/^\d{2}:\d{2}$/.test(String(memory.time))) {
+      errors.push(`${label}: time "${memory.time}" must be HH:MM (24h).`)
+    }
+    if (memory.locationName !== undefined && !isNonEmptyString(memory.locationName)) {
+      errors.push(`${label}: locationName must be a non-empty string when present.`)
+    }
     checkLatitude(errors, memory.latitude, label, false)
     checkLongitude(errors, memory.longitude, label, false)
     if (!Array.isArray(memory.mediaIds)) {

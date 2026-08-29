@@ -19,6 +19,12 @@ type CountrySelectorProps = {
   selectedCountryGroupId?: CountryGroupId
   selectedPlaceId?: PlaceId
   globeDistance: number
+  /**
+   * Narrow-layout mode: tapping a country card only expands/collapses its
+   * place list (no flyTo, no panel collapse); tapping a place item still
+   * selects and flies. Desktop behavior is unchanged.
+   */
+  countryExpandOnly?: boolean
   imageryBrightness: number
   imageryContrast: number
   imagerySaturation: number
@@ -58,6 +64,7 @@ export function CountrySelector({
   selectedCountryGroupId,
   selectedPlaceId,
   globeDistance,
+  countryExpandOnly = false,
   imageryBrightness,
   imageryContrast,
   imagerySaturation,
@@ -76,6 +83,10 @@ export function CountrySelector({
   const [isImageTuningOpen, setIsImageTuningOpen] = useState(false)
   const [isGlobeScaleOpen, setIsGlobeScaleOpen] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  // Narrow-layout local expansion: which country group shows its place list.
+  // Independent from the globe selection so browsing the list never flies
+  // the camera or collapses the panel.
+  const [expandedGroupId, setExpandedGroupId] = useState<CountryGroupId | undefined>()
 
   // The status filter narrows the place list across all country groups;
   // groups with no matching places drop out while a filter is active.
@@ -159,6 +170,7 @@ export function CountrySelector({
         ) : null}
         {visibleGroups.map((group) => {
           const isSelected = group.id === selectedCountryGroupId
+          const isOpen = countryExpandOnly ? group.id === expandedGroupId : isSelected
 
           return (
             <div
@@ -168,9 +180,15 @@ export function CountrySelector({
             >
               <button
                 type="button"
-                aria-expanded={isSelected}
+                aria-expanded={isOpen}
                 data-selected={isSelected}
-                onClick={() => onSelectCountryGroup(group.id)}
+                onClick={() => {
+                  if (countryExpandOnly) {
+                    setExpandedGroupId((current) => (current === group.id ? undefined : group.id))
+                    return
+                  }
+                  onSelectCountryGroup(group.id)
+                }}
                 onPointerEnter={(event) => {
                   if (event.pointerType === 'mouse') onHoverCountryGroup(group.id)
                 }}
@@ -217,8 +235,8 @@ export function CountrySelector({
 
               <div
                 className="country-city-disclosure"
-                data-open={isSelected}
-                aria-hidden={!isSelected}
+                data-open={isOpen}
+                aria-hidden={!isOpen}
               >
                 <div className="min-h-0 overflow-hidden">
                   <div className="relative ml-4 mt-2 space-y-1.5 border-l border-dashed border-slate-300/80 pb-1 pl-4 pr-1">
@@ -244,7 +262,7 @@ export function CountrySelector({
                             />
                             <button
                               type="button"
-                              disabled={!isSelected}
+                              disabled={!isOpen}
                               onClick={() => onSelectPlace(place.id)}
                               data-selected={isPlaceSelected}
                               className={`atlas-city-button flex w-full items-center justify-between gap-2 rounded-full border px-3 py-2 text-left text-xs font-semibold transition duration-200 ${

@@ -2,8 +2,9 @@
 
 import { describe, expect, it } from 'vitest'
 
-import type { Place, Visit } from './types'
+import type { Memory, Place, Visit } from './types'
 import {
+  collectMemoryMedia,
   countryGroupIdForPlace,
   deriveCountryGroups,
   deriveRoutes,
@@ -11,6 +12,7 @@ import {
   getVisitStatus,
   isCompletedVisit,
   latestVisitDate,
+  orderMemoriesChronologically,
   orderVisitsChronologically,
   selectVisits,
   slugify,
@@ -184,6 +186,65 @@ describe('latestVisitDate', () => {
   it('returns undefined when no completed visit has a date', () => {
     expect(latestVisitDate([makeVisit({ id: 'visit-a', status: 'planned', startDate: '2026-10-03' })])).toBeUndefined()
     expect(latestVisitDate([])).toBeUndefined()
+  })
+})
+
+const makeMemory = (overrides: Partial<Memory>): Memory => ({
+  id: 'mem-a',
+  visitId: 'visit-a',
+  type: 'note',
+  mediaIds: [],
+  ...TIMESTAMPS,
+  ...overrides,
+})
+
+describe('orderMemoriesChronologically', () => {
+  it('sorts by date, then time-of-day, then id (untimed memories go last within a day)', () => {
+    const memories = [
+      makeMemory({ id: 'mem-c', date: '2025-04-05', time: '21:00' }),
+      makeMemory({ id: 'mem-a', date: '2025-04-05', time: '07:40' }),
+      makeMemory({ id: 'mem-b', date: '2025-04-02' }),
+      makeMemory({ id: 'mem-d', date: '2025-04-05' }),
+    ]
+    expect(orderMemoriesChronologically(memories).map((memory) => memory.id)).toEqual([
+      'mem-b',
+      'mem-a',
+      'mem-c',
+      'mem-d',
+    ])
+  })
+
+  it('does not mutate the input array', () => {
+    const memories = [
+      makeMemory({ id: 'mem-b', date: '2025-04-05' }),
+      makeMemory({ id: 'mem-a', date: '2025-04-02' }),
+    ]
+    orderMemoriesChronologically(memories)
+    expect(memories.map((memory) => memory.id)).toEqual(['mem-b', 'mem-a'])
+  })
+})
+
+describe('collectMemoryMedia', () => {
+  const mediaById = {
+    'media-a': { id: 'media-a', type: 'image' as const, src: '/a.webp', createdAt: '2026-08-29' },
+    'media-b': { id: 'media-b', type: 'image' as const, src: '/b.webp', createdAt: '2026-08-29' },
+  }
+
+  it('collects media in memory order and dedupes by id', () => {
+    const memories = [
+      makeMemory({ id: 'mem-a', mediaIds: ['media-a', 'media-b'] }),
+      makeMemory({ id: 'mem-b', mediaIds: ['media-b'] }),
+    ]
+    expect(collectMemoryMedia(memories, mediaById).map((media) => media.id)).toEqual(['media-a', 'media-b'])
+  })
+
+  it('skips dangling media ids instead of breaking', () => {
+    const memories = [makeMemory({ id: 'mem-a', mediaIds: ['media-missing', 'media-a'] })]
+    expect(collectMemoryMedia(memories, mediaById).map((media) => media.id)).toEqual(['media-a'])
+  })
+
+  it('returns an empty list when no memory carries media', () => {
+    expect(collectMemoryMedia([makeMemory({ id: 'mem-a' })], mediaById)).toEqual([])
   })
 })
 

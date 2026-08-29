@@ -1,1 +1,80 @@
-[]
+[
+  {
+    "id": "media-tokyo-sakura-meguro-river",
+    "type": "image",
+    "placeId": "place-tokyo",
+    "src": "/media/content/tokyo-2025-sakura/meguro-river.webp",
+    "thumbnailSrc": "/media/content/tokyo-2025-sakura/meguro-river.thumb.webp",
+    "previewSrc": "/media/content/tokyo-2025-sakura/meguro-river.preview.webp",
+    "width": 1600,
+    "height": 1000,
+    "capturedAt": "2025-04-05",
+    "alt": "目黑川沿岸的樱花（示例图）",
+    "createdAt": "2026-08-29"
+  },
+  {
+    "id": "media-tokyo-sakura-ueno-park",
+    "type": "image",
+    "placeId": "place-tokyo",
+    "src": "/media/content/tokyo-2025-sakura/ueno-park.webp",
+    "thumbnailSrc": "/media/content/tokyo-2025-sakura/ueno-park.thumb.webp",
+    "previewSrc": "/media/content/tokyo-2025-sakura/ueno-park.preview.webp",
+    "width": 1600,
+    "height": 1000,
+    "capturedAt": "2025-04-04",
+    "alt": "上野公园野餐（示例图）",
+    "createdAt": "2026-08-29"
+  },
+  {
+    "id": "media-tokyo-sakura-shibuya-night",
+    "type": "image",
+    "placeId": "place-tokyo",
+    "src": "/media/content/tokyo-2025-sakura/shibuya-night.webp",
+    "thumbnailSrc": "/media/content/tokyo-2025-sakura/shibuya-night.thumb.webp",
+    "previewSrc": "/media/content/tokyo-2025-sakura/shibuya-night.preview.webp",
+    "width": 1600,
+    "height": 1000,
+    "capturedAt": "2025-04-03",
+    "alt": "涩谷十字路口夜景（示例图）",
+    "createdAt": "2026-08-29"
+  },
+  {
+    "id": "media-tokyo-sakura-sensoji-morning",
+    "type": "image",
+    "placeId": "place-tokyo",
+    "src": "/media/content/tokyo-2025-sakura/sensoji-morning.webp",
+    "thumbnailSrc": "/media/content/tokyo-2025-sakura/sensoji-morning.thumb.webp",
+    "previewSrc": "/media/content/tokyo-2025-sakura/sensoji-morning.preview.webp",
+    "width": 1600,
+    "height": 1000,
+    "capturedAt": "2025-04-02",
+    "alt": "浅草寺清晨（示例图）",
+    "createdAt": "2026-08-29"
+  },
+  {
+    "id": "media-tokyo-sakura-kissa-latte",
+    "type": "image",
+    "placeId": "place-tokyo",
+    "src": "/media/content/tokyo-2025-sakura/kissa-latte.webp",
+    "thumbnailSrc": "/media/content/tokyo-2025-sakura/kissa-latte.thumb.webp",
+    "previewSrc": "/media/content/tokyo-2025-sakura/kissa-latte.preview.webp",
+    "width": 1600,
+    "height": 1000,
+    "capturedAt": "2025-04-05",
+    "alt": "喫茶店的拿铁（示例图）",
+    "createdAt": "2026-08-29"
+  },
+  {
+    "id": "media-tokyo-sakura-chidorigafuchi",
+    "type": "image",
+    "placeId": "place-tokyo",
+    "src": "/media/content/tokyo-2025-sakura/chidorigafuchi.webp",
+    "thumbnailSrc": "/media/content/tokyo-2025-sakura/chidorigafuchi.thumb.webp",
+    "previewSrc": "/media/content/tokyo-2025-sakura/chidorigafuchi.preview.webp",
+    "width": 1600,
+    "height": 1000,
+    "capturedAt": "2025-04-06",
+    "alt": "千鸟渊划船赏樱（示例图）",
+    "createdAt": "2026-08-29"
+  }
+]

@@ -22,8 +22,10 @@ of truth for the static build; keep them valid with `npm run validate`.
   date ranges.
 - `memories.json` — array of memories. Required: `id`, `visitId`,
   `type` (`note` | `activity` | `photo`), `mediaIds` (array, may be empty),
-  timestamps. Optional: `title`, `body`, `date`, `latitude`, `longitude`,
-  `tags`.
+  timestamps. Optional: `title`, `body`, `date`, `time` (`HH:MM`, 24h),
+  `locationName` (short human label), `latitude`, `longitude`, `tags`.
+  `activity` memories typically carry `time`/`locationName` tags; `photo`
+  memories reference media via `mediaIds`.
 - `media.json` — array of media records. Required: `id`,
   `type` (`image` | `video`), `src`, `createdAt`. Optional: `placeId`,
   `thumbnailSrc`, `previewSrc`, `width`, `height`, `capturedAt`, `latitude`,

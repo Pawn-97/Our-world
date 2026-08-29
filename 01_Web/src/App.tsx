@@ -343,6 +343,7 @@ function WorldApp({ content }: { content: WorldContent }) {
                 selectedCountryGroupId={selectedCountryGroupId}
                 selectedPlaceId={selectedPlaceId}
                 globeDistance={globeDistance}
+                countryExpandOnly={isNarrowLayout}
                 imageryBrightness={imageryTuning.brightness}
                 imageryContrast={imageryTuning.contrast}
                 imagerySaturation={imageryTuning.saturation}
@@ -440,6 +441,7 @@ function WorldApp({ content }: { content: WorldContent }) {
           group={selectedGroup}
           visits={content.visitsByPlaceId[detailPlace.id] ?? []}
           memoriesByVisitId={content.memoriesByVisitId}
+          mediaById={content.mediaById}
           photos={content.mediaByPlaceId[detailPlace.id] ?? []}
           cover={content.coverByPlaceId[detailPlace.id]}
           dateRangeLabel={content.dateRangeByPlaceId[detailPlace.id] ?? ''}
