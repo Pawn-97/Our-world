@@ -1,0 +1,22 @@
+[
+  {
+    "id": "visit-tokyo-2023-10",
+    "placeId": "place-tokyo",
+    "startDate": "2023-10-02",
+    "endDate": "2023-10-07",
+    "title": "初见东京",
+    "summary": "第一次一起去东京，住在浅草附近，每天走到腿软。",
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  },
+  {
+    "id": "visit-tokyo-2025-04",
+    "placeId": "place-tokyo",
+    "startDate": "2025-04-02",
+    "endDate": "2025-04-06",
+    "title": "樱花季再访",
+    "summary": "赶在樱花满开的一周回去，补上了上次没走到的地方。",
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  }
+]

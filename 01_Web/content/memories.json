@@ -1,0 +1,46 @@
+[
+  {
+    "id": "mem-tokyo-sensoji-note",
+    "visitId": "visit-tokyo-2023-10",
+    "type": "note",
+    "title": "浅草寺的清晨",
+    "body": "赶在游客到来之前走进浅草寺，香炉的烟还没散开，求签求到了大吉。",
+    "date": "2023-10-03",
+    "mediaIds": [],
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  },
+  {
+    "id": "mem-tokyo-tsukiji-note",
+    "visitId": "visit-tokyo-2023-10",
+    "type": "note",
+    "title": "筑地场外市场的早餐",
+    "body": "玉子烧和海鲜丼都很夸张，站着吃完还想再排队一次。",
+    "date": "2023-10-05",
+    "mediaIds": [],
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  },
+  {
+    "id": "mem-tokyo-shibuya-note",
+    "visitId": "visit-tokyo-2025-04",
+    "type": "note",
+    "title": "涩谷十字路口的夜",
+    "body": "在路口看了三次红绿灯变换，人流像潮水一样，永远看不腻。",
+    "date": "2025-04-03",
+    "mediaIds": [],
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  },
+  {
+    "id": "mem-tokyo-sakura-note",
+    "visitId": "visit-tokyo-2025-04",
+    "type": "note",
+    "title": "目黑川的樱花",
+    "body": "花瓣落进河面顺着水流走，买了热咖啡坐在岸边看了一个下午。",
+    "date": "2025-04-05",
+    "mediaIds": [],
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  }
+]

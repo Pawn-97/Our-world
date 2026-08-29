@@ -17,42 +17,41 @@ Use port 5175 when the read-only rollback project is still occupying 5174.
 
 StarMap is one codebase, not separate public and editor editions:
 
-- `npm run dev -- --host 127.0.0.1 --port 5175` starts the **local editing state**. Small settings controls appear beside Country Maps, City Cards, City Photos, and Drone Media. Changes are saved directly to ignored local data, with backups and atomic writes; photo uploads enter the immutable `MediaInbox` first and then use the existing three-tier importer.
+- `npm run dev -- --host 127.0.0.1 --port 5175` starts the **local editing state**. Photo curation controls appear on place galleries (order, hide/show, cover). Changes are saved directly to ignored local data, with backups and atomic writes; photo uploads enter the immutable `MediaInbox` first and then use the existing three-tier importer.
 - `npm run build` creates the **public display state**. Editing controls are not rendered and the local write middleware does not exist. The output is a static website containing only the data and media deliberately included in that build.
 
 Every person who clones the open-source project receives the same local editing capability. No DeepSeek Harness, chat-command relay, or AI service is required for deterministic edits. An Agent remains useful when a country, city, date, coordinate, media type, or privacy decision is uncertain, but the editor never guesses those values.
 
-Local editor data is stored in `src/data/generated/editor-state.local.json`. It records display order, hidden items, photo covers, and media order; it is ignored by Git together with private travel and media catalogs. Country creation uses one Chinese / English / ISO-code autocomplete field backed by the bundled country catalog, then derives the canonical names, code, flag, and map center from the selected result. City creation appears only after entering a country; the user enters a name and explicitly presses Search, then the editor uses that country's ISO code to constrain an online OpenStreetMap Nominatim lookup and derives the selected city's bilingual names and coordinates. Dates remain explicit user input. Hiding is non-destructive: source records and Inbox originals remain untouched.
+Local editor data is stored in `src/data/generated/editor-state.local.json`. It records photo display order, hidden photos, and cover choices per place; it is ignored by Git together with private media catalogs. World content — places, visits, memories — is edited directly in the tracked `content/*.json` files (see `content/README.md` for the ID convention); there is no in-app record editor. Hiding is non-destructive: source records and Inbox originals remain untouched.
 
 The editor separates two similar-looking recovery actions:
 
 - **Undo this round** returns the current unsaved ordering and hide/show draft to the state that existed when the editor was opened. It does not erase previously saved data.
 - **Restore hidden items** explicitly removes saved hide flags, writes that change to the ignored local state, and reloads the page. It still does not delete or reconstruct source records.
 
-City lookup requires an internet connection and follows the public [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) with explicit user-triggered searches, serialized requests, a local in-memory cache, country filtering, and visible OpenStreetMap attribution. Do not replace it with autocomplete-on-every-keystroke traffic or bulk geocoding. The country catalog is supplied by the ODbL-licensed [`world-countries`](https://github.com/mledoze/countries) package and is used only by the loopback editor middleware, so it is not shipped in the public client bundle.
-
 ## Verification
 
 ```powershell
-npm run privacy:check
 npm run lint
+npm run test
+npm run validate
 npm run build
+npm run privacy:check
+npm run media:check
 ```
 
-## Public Sample and Private Data
+## Content and Private Data
 
-StarMap has two data layers:
+Our World has two data layers:
 
-- `src/data/travel-map.sample.json` is a tracked neutral North Atlantic demonstration used by a clean open-source clone.
-- `src/data/generated/travel-map.local.json` is an ignored local overlay containing the owner's countries, cities, routes, coordinates, and display rules.
+- `content/world.json`, `content/places.json`, `content/visits.json`, `content/memories.json`, and `content/media.json` are the **tracked** world content — the deliberate, publishable record of places, visits, and memories. `npm run validate` fails the workflow on missing or duplicate IDs, bad coordinates, dangling references, or bad enums.
+- `src/data/generated/*.local.json` files are **ignored** local state: the imported media catalog and the media editor choices (order, hidden, covers). They never enter Git.
 
-When the local file exists it wins automatically, so personal use remains unchanged. Set `VITE_TRAVEL_ATLAS_DATA_MODE=sample` in `.env.local` to force the public demonstration during release QA. In a development preview, `?data=sample` provides the same temporary override without changing local settings. New users copy the sample shape into the ignored local path and replace its records with their own; navigation is generated from that data.
-
-Run `npm run privacy:check` before preparing any public repository. See the [open-source privacy boundary](../03_Reference/TravelAtlas_open_source_privacy_boundary.md) for the clean-history rule and deployment options.
+Run `npm run privacy:check` before preparing any public repository. It asserts that all five tracked content files are in the Git manifest and that private paths (Inbox originals, generated catalogs, local editor state, env files) are not. See the [open-source privacy boundary](../03_Reference/TravelAtlas_open_source_privacy_boundary.md) for the clean-history rule and deployment options.
 
 ## Import Personal Media
 
-Users can simply ask an Agent to read the StarMap rules and explain how to import their photos. The Agent starts with the short [Media Inbox README](../02_Assets/MediaInbox/README.md), checks that every item has a reliable existing country and city, and asks before proceeding whenever required information is missing or uncertain.
+Users can simply ask an Agent to read the StarMap rules and explain how to import their photos. The Agent starts with the short [Media Inbox README](../02_Assets/MediaInbox/README.md), checks that every item maps to an existing place in `content/places.json` (grouped under its country), and asks before proceeding whenever required information is missing or uncertain.
 
 After the files follow the tracked Inbox template, run:
 
@@ -61,7 +60,7 @@ npm run media:check
 npm run media:import
 ```
 
-The first command is read-only and reports unresolved countries, cities, formats, or drone metadata. After a clean preflight, the second command preserves a local original copy and generates two WebP derivatives for every still image: a `640 px` thumbnail for city/sidebar/card surfaces and a `2400 px` preview for the photo viewer. Full-resolution photos and panoramas are requested only by explicit viewing actions. All three tiers use stable, hash-based paths inside the ignored local user library, and the ignored catalog records their dimensions. Restart the preview after importing.
+The first command is read-only and reports unresolved countries, places, formats, or drone metadata. After a clean preflight, the second command preserves a local original copy and generates two WebP derivatives for every still image: a `640 px` thumbnail for globe/sidebar/card surfaces and a `2400 px` preview for the photo viewer. Full-resolution photos and panoramas are requested only by explicit viewing actions. All three tiers use stable, hash-based paths inside the ignored local user library, and the ignored catalog records their dimensions. Restart the preview after importing.
 
 Inbox source media must never be moved, renamed, overwritten, or deleted. Agents may create or update only the private mapping sidecars `country.json` and city-level `media.json`; supported still formats are optimized outside the Inbox by the importer, while unsupported formats still require a separate user-approved conversion step.
 
@@ -104,10 +103,11 @@ For each public update, bump the package version, create a matching semantic-ver
 ## Architecture
 
 - `src/components/CesiumAtlasGlobe.tsx` is the primary map implementation.
-- `src/data/travelAtlas.ts` selects the ignored private overlay when present and otherwise loads the tracked public sample.
-- `src/data/mediaCatalog.ts` loads only the ignored personal media catalog; it contains no built-in user media.
+- `src/domain/` holds the World → Place → Visit → Memory domain types and pure view-model derivations (country groups, routes, date ranges).
+- `src/repositories/` holds the repository interfaces and the local implementations that load the tracked `content/*.json` files plus the ignored generated media catalog. UI components never import content JSON directly.
+- `scripts/validate-content.mjs` validates all tracked content before builds (`npm run validate`).
 - `scripts/local-editor-plugin.mjs` provides the loopback-only Vite editing middleware during `serve`; it is excluded from the production runtime.
-- `src/data/editorState.ts` applies ignored local ordering, visibility, and cover choices without rewriting imported source records.
+- `src/data/editorState.ts` applies ignored local photo ordering, visibility, and cover choices without rewriting imported source records.
 - Project-level context and handoff live one directory above this web workspace.
 
 ## Documentation

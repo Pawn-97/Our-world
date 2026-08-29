@@ -1,32 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Images, Rows3, X } from 'lucide-react'
-import { getMediaSource } from '../data/mediaCatalog'
-import type { ImportedMediaCatalogItem } from '../data/mediaCatalog'
+import type { Media } from '../domain/types'
+import { mediaService } from '../services/mediaService'
 
-export type CityPhotoGalleryRequest = {
-  photos: ImportedMediaCatalogItem[]
-  cityName: string
+export type PlacePhotoGalleryRequest = {
+  photos: Media[]
+  placeName: string
   initialPhotoId?: string
   mode: 'grid' | 'viewer'
 }
 
-type CityPhotoGalleryModalProps = CityPhotoGalleryRequest & {
+type PlacePhotoGalleryModalProps = PlacePhotoGalleryRequest & {
   onClose: () => void
 }
 
-export function CityPhotoGalleryModal({
+// Gallery chrome still uses the original .city-photo-gallery-* stylesheet
+// classes; only the data source changed (domain Media via MediaService URLs).
+export function PlacePhotoGalleryModal({
   photos,
-  cityName,
+  placeName,
   initialPhotoId,
   mode: initialMode,
   onClose,
-}: CityPhotoGalleryModalProps) {
+}: PlacePhotoGalleryModalProps) {
   const initialIndex = Math.max(0, photos.findIndex((photo) => photo.id === initialPhotoId))
   const [mode, setMode] = useState<'grid' | 'viewer'>(initialMode)
   const [activeIndex, setActiveIndex] = useState(initialIndex)
   const activePhoto = photos[activeIndex]
   const activeThumbRef = useRef<HTMLButtonElement | null>(null)
-  const dialogTitleId = 'city-photo-gallery-title'
+  const dialogTitleId = 'place-photo-gallery-title'
 
   const gridPhotos = useMemo(() => photos.map((photo, index) => ({ photo, index })), [photos])
 
@@ -80,8 +82,8 @@ export function CityPhotoGalleryModal({
       <section className="city-photo-gallery-window" data-mode={mode}>
         <header className="city-photo-gallery-header">
           <div className="min-w-0">
-            <p className="city-photo-gallery-kicker">City Photos</p>
-            <h2 id={dialogTitleId}>{cityName}</h2>
+            <p className="city-photo-gallery-kicker">Place Photos</p>
+            <h2 id={dialogTitleId}>{placeName}</h2>
             <p>{photos.length} photos</p>
           </div>
           <div className="city-photo-gallery-actions">
@@ -109,13 +111,13 @@ export function CityPhotoGalleryModal({
                   key={photo.id}
                   className="city-photo-gallery-grid-item"
                   onClick={() => showPhoto(index)}
-                  aria-label={`Open ${cityName} photo ${index + 1}`}
+                  aria-label={`Open ${placeName} photo ${index + 1}`}
                 >
                   <img
-                    src={getMediaSource(photo, 'thumb')}
-                    alt={`${cityName} photo ${index + 1}`}
-                    width={photo.variants?.thumb?.width ?? photo.width}
-                    height={photo.variants?.thumb?.height ?? photo.height}
+                    src={mediaService.getThumbnailUrl(photo)}
+                    alt={photo.alt ?? `${placeName} photo ${index + 1}`}
+                    width={photo.width}
+                    height={photo.height}
                     loading="lazy"
                     decoding="async"
                   />
@@ -138,10 +140,10 @@ export function CityPhotoGalleryModal({
               <img
                 key={activePhoto.id}
                 className="city-photo-gallery-main-image"
-                src={getMediaSource(activePhoto, 'preview')}
-                alt={`${cityName} photo ${activeIndex + 1}`}
-                width={activePhoto.variants?.preview?.width ?? activePhoto.width}
-                height={activePhoto.variants?.preview?.height ?? activePhoto.height}
+                src={mediaService.getUrl(activePhoto)}
+                alt={activePhoto.alt ?? `${placeName} photo ${activeIndex + 1}`}
+                width={activePhoto.width}
+                height={activePhoto.height}
                 decoding="async"
               />
               <button
@@ -165,11 +167,11 @@ export function CityPhotoGalleryModal({
                   ref={index === activeIndex ? activeThumbRef : undefined}
                   className="city-photo-gallery-thumb"
                   data-active={index === activeIndex}
-                  aria-label={`Show ${cityName} photo ${index + 1}`}
+                  aria-label={`Show ${placeName} photo ${index + 1}`}
                   aria-pressed={index === activeIndex}
                   onClick={() => setActiveIndex(index)}
                 >
-                  <img src={getMediaSource(photo, 'thumb')} alt="" loading="lazy" decoding="async" />
+                  <img src={mediaService.getThumbnailUrl(photo)} alt="" loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>

@@ -1,20 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react'
+import { useWorldContent } from './app/useWorldContent'
+import type { WorldContent } from './app/useWorldContent'
 import { AtlasHeader } from './components/AtlasHeader'
 import { CesiumAtlasGlobe } from './components/CesiumAtlasGlobe'
+import type { GlobePlace, GlobeRoute } from './components/CesiumAtlasGlobe'
 import { CountrySelector } from './components/CountrySelector'
 import { MapSourceSwitcher } from './components/MapSourceSwitcher'
 import { InfoCard } from './components/InfoCard'
 import { PlacePreviewSheet } from './components/PlacePreviewSheet'
 import { PlaceDetailOverlay } from './components/PlaceDetailOverlay'
-import { CityPhotoGalleryModal } from './components/CityPhotoGalleryModal'
-import type { CityPhotoGalleryRequest } from './components/CityPhotoGalleryModal'
+import { PlacePhotoGalleryModal } from './components/PlacePhotoGalleryModal'
+import type { PlacePhotoGalleryRequest } from './components/PlacePhotoGalleryModal'
 import { getInitialMapSource, rememberMapSource } from './data/mapSources'
 import type { MapSourceId } from './data/mapSources'
-import { cityById, countryById, getCitiesForCountry } from './data/travelAtlas'
+import { countryGroupIdForPlace } from './domain/viewModel'
+import type { CountryGroupId, PlaceId, SelectionMode } from './domain/types'
 import { detectGlobeQualityMode } from './globeQuality'
 import type { GlobeQualityMode } from './globeQuality'
-import type { CityId, CountryId, SelectionMode } from './types/travel'
 
 type ThemeMode = 'day' | 'night'
 
@@ -44,16 +47,16 @@ const cameraScaleForDistance = (distance: number): CameraScale => {
   return 'world'
 }
 
-function App() {
-  const [selectedCountryId, setSelectedCountryId] = useState<CountryId | undefined>()
-  const [selectedCityId, setSelectedCityId] = useState<CityId | undefined>()
-  const [hoveredCountryId, setHoveredCountryId] = useState<CountryId | undefined>()
+function WorldApp({ content }: { content: WorldContent }) {
+  const [selectedCountryGroupId, setSelectedCountryGroupId] = useState<CountryGroupId | undefined>()
+  const [selectedPlaceId, setSelectedPlaceId] = useState<PlaceId | undefined>()
+  const [hoveredCountryGroupId, setHoveredCountryGroupId] = useState<CountryGroupId | undefined>()
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('overview')
   const [globeDistance, setGlobeDistance] = useState(overviewDistance)
   const [globeResetVersion, setGlobeResetVersion] = useState(0)
   const [imageryTuningByTheme, setImageryTuningByTheme] = useState(imageryTuningDefaults)
   const [mapSource, setMapSource] = useState<MapSourceId>(getInitialMapSource)
-  const [cityPhotoGallery, setCityPhotoGallery] = useState<CityPhotoGalleryRequest>()
+  const [placePhotoGallery, setPlacePhotoGallery] = useState<PlacePhotoGalleryRequest>()
   const [placeDetailOpen, setPlaceDetailOpen] = useState(false)
   const [sidebarsOpen, setSidebarsOpen] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(sidebarMediaQuery).matches,
@@ -74,6 +77,36 @@ function App() {
   // Idle auto-hide only applies to the wide desktop layout; narrow screens
   // keep their default-hidden overlay panels.
   const panelsVisible = sidebarsOpen && !panelsIdleHidden
+
+  const globePlaces = useMemo<GlobePlace[]>(
+    () => content.places.map((place) => ({
+      id: place.id,
+      name: place.name,
+      nameEn: place.nameEn,
+      lat: place.latitude,
+      lng: place.longitude,
+      status: place.status,
+      countryGroupId: countryGroupIdForPlace(place),
+      visitCount: content.visitCountByPlaceId[place.id] ?? 0,
+    })),
+    [content],
+  )
+
+  const globeRoutes = useMemo<GlobeRoute[]>(
+    () => content.routes.flatMap((route) => {
+      const from = content.placeById[route.fromPlaceId]
+      const to = content.placeById[route.toPlaceId]
+      if (!from || !to) return []
+      return [{
+        ...route,
+        fromLat: from.latitude,
+        fromLng: from.longitude,
+        toLat: to.latitude,
+        toLng: to.longitude,
+      }]
+    }),
+    [content],
+  )
 
   const updateImageryTuning = (property: keyof ImageryTuning, value: number) => {
     setImageryTuningByTheme((current) => ({
@@ -107,7 +140,7 @@ function App() {
   // Desktop idle auto-hide: after ~4s without pointer/keyboard activity or
   // selection changes, both side panels fade out for immersion. Any activity
   // brings them back. Never hides while a panel is hovered or focused.
-  const selectionKey = `${selectionMode}:${selectedCountryId ?? ''}:${selectedCityId ?? ''}`
+  const selectionKey = `${selectionMode}:${selectedCountryGroupId ?? ''}:${selectedPlaceId ?? ''}`
   const [lastSelectionKey, setLastSelectionKey] = useState(selectionKey)
   if (selectionKey !== lastSelectionKey) {
     // Render-time state adjustment: a selection change always wakes panels.
@@ -139,65 +172,65 @@ function App() {
       window.removeEventListener('pointerdown', handleActivity)
       window.removeEventListener('keydown', handleActivity)
     }
-  }, [isNarrowLayout, sidebarsOpen, selectedCountryId, selectedCityId, selectionMode])
+  }, [isNarrowLayout, sidebarsOpen, selectedCountryGroupId, selectedPlaceId, selectionMode])
 
   const resetOverview = () => {
-    setSelectedCountryId(undefined)
-    setSelectedCityId(undefined)
+    setSelectedCountryGroupId(undefined)
+    setSelectedPlaceId(undefined)
     setPlaceDetailOpen(false)
     setSelectionMode('overview')
     setGlobeDistance(overviewDistance)
     setGlobeResetVersion((version) => version + 1)
   }
 
-  const selectCountry = (countryId: CountryId) => {
-    if (selectedCountryId === countryId && selectionMode !== 'overview') {
+  const selectCountryGroup = (countryGroupId: CountryGroupId) => {
+    if (selectedCountryGroupId === countryGroupId && selectionMode !== 'overview') {
       resetOverview()
       return
     }
 
-    setSelectedCountryId(countryId)
-    setSelectedCityId(undefined)
+    setSelectedCountryGroupId(countryGroupId)
+    setSelectedPlaceId(undefined)
     setPlaceDetailOpen(false)
     setSelectionMode('country')
     setGlobeDistance(countryDistance)
     if (isNarrowLayout) setSidebarsOpen(false)
   }
 
-  const selectCity = (cityId: CityId) => {
-    if (selectedCityId === cityId) {
+  const selectPlace = (placeId: PlaceId) => {
+    if (selectedPlaceId === placeId) {
       // Second activation on an already-selected place drills into the
       // street/district level; a third activation toggles the selection off.
       if (globeDistance > streetDistance + 0.001) {
-        setSelectionMode('city')
+        setSelectionMode('place')
         setGlobeDistance(streetDistance)
         if (isNarrowLayout) setSidebarsOpen(false)
         return
       }
-      setSelectedCityId(undefined)
+      setSelectedPlaceId(undefined)
       setPlaceDetailOpen(false)
-      setSelectionMode('country')
-      setGlobeDistance(countryDistance)
+      setSelectionMode(selectedCountryGroupId ? 'country' : 'overview')
+      setGlobeDistance(selectedCountryGroupId ? countryDistance : overviewDistance)
       return
     }
 
-    const city = cityById[cityId]
-    if (city.countryId) setSelectedCountryId(city.countryId)
-    setSelectedCityId(cityId)
+    const place = content.placeById[placeId]
+    if (place) setSelectedCountryGroupId(countryGroupIdForPlace(place))
+    setSelectedPlaceId(placeId)
     setPlaceDetailOpen(false)
-    setSelectionMode('city')
+    setSelectionMode('place')
     setGlobeDistance(cityDistance)
     if (isNarrowLayout) setSidebarsOpen(false)
   }
 
   const closePlacePreview = () => {
-    setSelectedCityId(undefined)
-    setSelectionMode(selectedCountryId ? 'country' : 'overview')
-    setGlobeDistance(selectedCountryId ? countryDistance : overviewDistance)
+    setSelectedPlaceId(undefined)
+    setSelectionMode(selectedCountryGroupId ? 'country' : 'overview')
+    setGlobeDistance(selectedCountryGroupId ? countryDistance : overviewDistance)
   }
 
   const openPlaceDetail = () => {
-    if (selectedCityId) setPlaceDetailOpen(true)
+    if (selectedPlaceId) setPlaceDetailOpen(true)
   }
 
   const changeGlobeDistance = (distance: number) => {
@@ -206,14 +239,14 @@ function App() {
     const cameraScale = cameraScaleForDistance(distance)
 
     if (cameraScale === 'city' || cameraScale === 'street') {
-      if (selectedCityId) {
-        setSelectionMode('city')
-      } else if (selectedCountryId) {
-        const firstCountryCity = getCitiesForCountry(selectedCountryId)[0]
+      if (selectedPlaceId) {
+        setSelectionMode('place')
+      } else if (selectedCountryGroupId) {
+        const firstGroupPlace = content.countryGroupById[selectedCountryGroupId]?.places[0]
 
-        if (firstCountryCity) {
-          setSelectedCityId(firstCountryCity.id)
-          setSelectionMode('city')
+        if (firstGroupPlace) {
+          setSelectedPlaceId(firstGroupPlace.id)
+          setSelectionMode('place')
         } else {
           setSelectionMode('country')
         }
@@ -221,7 +254,7 @@ function App() {
         setSelectionMode('overview')
       }
     } else if (cameraScale === 'country') {
-      setSelectionMode(selectedCountryId ? 'country' : 'overview')
+      setSelectionMode(selectedCountryGroupId ? 'country' : 'overview')
     } else {
       setSelectionMode('overview')
     }
@@ -229,12 +262,15 @@ function App() {
     setGlobeDistance(distance)
   }
 
+  const selectedPlace = selectedPlaceId ? content.placeById[selectedPlaceId] : undefined
+  const selectedGroup = selectedCountryGroupId
+    ? content.countryGroupById[selectedCountryGroupId]
+    : undefined
+
   // Mobile (sidebars collapsed below the 1100px breakpoint) shows a compact
   // bottom-sheet preview instead of the hidden desktop side panels.
-  const mobilePlacePreview = !sidebarsOpen && selectionMode === 'city' && selectedCityId
-    ? cityById[selectedCityId]
-    : undefined
-  const detailCity = placeDetailOpen && selectedCityId ? cityById[selectedCityId] : undefined
+  const mobilePreviewPlace = !sidebarsOpen && selectionMode === 'place' ? selectedPlace : undefined
+  const detailPlace = placeDetailOpen ? selectedPlace : undefined
 
   return (
     <main className="theme-night relative h-[100dvh] overflow-hidden bg-[#010409] text-slate-950">
@@ -249,20 +285,24 @@ function App() {
       >
           <div className="absolute inset-0 z-0">
             <CesiumAtlasGlobe
-              hoveredCountryId={hoveredCountryId}
+              places={globePlaces}
+              countryGroups={content.countryGroups}
+              routes={globeRoutes}
+              overviewTarget={content.overviewTarget}
+              hoveredCountryGroupId={hoveredCountryGroupId}
               imageryBrightness={imageryTuning.brightness}
               imageryContrast={imageryTuning.contrast}
               imagerySaturation={imageryTuning.saturation}
               mapSource={mapSource}
-              selectedCountryId={selectedCountryId}
-              selectedCityId={selectedCityId}
+              selectedCountryGroupId={selectedCountryGroupId}
+              selectedPlaceId={selectedPlaceId}
               selectionMode={selectionMode}
               globeScale={globeDistance}
               resetVersion={globeResetVersion}
               isNight={activeTheme === 'night'}
               showMapContent={!placeDetailOpen}
               qualityMode={qualityMode}
-              onSelectCity={selectCity}
+              onSelectPlace={selectPlace}
             />
           </div>
 
@@ -299,31 +339,37 @@ function App() {
               data-sidebars-open={panelsVisible}
             >
               <CountrySelector
-                selectedCountryId={selectedCountryId}
-                selectedCityId={selectedCityId}
+                countryGroups={content.countryGroups}
+                selectedCountryGroupId={selectedCountryGroupId}
+                selectedPlaceId={selectedPlaceId}
                 globeDistance={globeDistance}
                 imageryBrightness={imageryTuning.brightness}
                 imageryContrast={imageryTuning.contrast}
                 imagerySaturation={imageryTuning.saturation}
                 onBrightnessChange={(value) => updateImageryTuning('brightness', value)}
                 onContrastChange={(value) => updateImageryTuning('contrast', value)}
-                onHoverCountry={setHoveredCountryId}
+                onHoverCountryGroup={setHoveredCountryGroupId}
                 onResetImageryTuning={resetImageryTuning}
                 onSaturationChange={(value) => updateImageryTuning('saturation', value)}
-                onSelectCountry={selectCountry}
-                onSelectCity={selectCity}
+                onSelectCountryGroup={selectCountryGroup}
+                onSelectPlace={selectPlace}
                 onDistanceChange={changeGlobeDistance}
                 onResetView={resetOverview}
               />
 
               <div className="atlas-right-stack">
                 <InfoCard
-                  key={`info-${selectionMode}-${selectedCountryId ?? 'none'}-${selectedCityId ?? 'none'}`}
+                  key={`info-${selectionMode}-${selectedCountryGroupId ?? 'none'}-${selectedPlaceId ?? 'none'}`}
                   mode={selectionMode}
-                  selectedCountryId={selectedCountryId}
-                  selectedCityId={selectedCityId}
-                  onSelectCity={selectCity}
-                  onOpenCityPhotos={setCityPhotoGallery}
+                  worldName={content.world.name}
+                  group={selectedGroup}
+                  place={selectedPlace}
+                  photos={selectedPlace ? content.mediaByPlaceId[selectedPlace.id] ?? [] : []}
+                  coverForPlace={(placeId) => content.coverByPlaceId[placeId]}
+                  hiddenPhotoIds={selectedPlace ? content.hiddenMediaIdsByPlaceId[selectedPlace.id] ?? [] : []}
+                  dateRangeForPlace={(placeId) => content.dateRangeByPlaceId[placeId] ?? ''}
+                  onSelectPlace={selectPlace}
+                  onOpenPhotos={setPlacePhotoGallery}
                   onOpenPlaceDetail={openPlaceDetail}
                 />
               </div>
@@ -376,32 +422,67 @@ function App() {
           </div>
       </section>
 
-      {mobilePlacePreview ? (
+      {mobilePreviewPlace ? (
         <PlacePreviewSheet
-          city={mobilePlacePreview}
-          country={mobilePlacePreview.countryId ? countryById[mobilePlacePreview.countryId] : undefined}
+          place={mobilePreviewPlace}
+          group={selectedGroup}
+          dateRangeLabel={content.dateRangeByPlaceId[mobilePreviewPlace.id] ?? ''}
           onClose={closePlacePreview}
           onOpenDetail={openPlaceDetail}
         />
       ) : null}
 
-      {detailCity ? (
+      {detailPlace ? (
         <PlaceDetailOverlay
-          city={detailCity}
-          country={detailCity.countryId ? countryById[detailCity.countryId] : undefined}
+          place={detailPlace}
+          group={selectedGroup}
+          visits={content.visitsByPlaceId[detailPlace.id] ?? []}
+          memoriesByVisitId={content.memoriesByVisitId}
+          photos={content.mediaByPlaceId[detailPlace.id] ?? []}
+          cover={content.coverByPlaceId[detailPlace.id]}
+          dateRangeLabel={content.dateRangeByPlaceId[detailPlace.id] ?? ''}
           onClose={() => setPlaceDetailOpen(false)}
-          onOpenPhotos={setCityPhotoGallery}
+          onOpenPhotos={setPlacePhotoGallery}
         />
       ) : null}
 
-      {cityPhotoGallery ? (
-        <CityPhotoGalleryModal
-          {...cityPhotoGallery}
-          onClose={() => setCityPhotoGallery(undefined)}
+      {placePhotoGallery ? (
+        <PlacePhotoGalleryModal
+          {...placePhotoGallery}
+          onClose={() => setPlacePhotoGallery(undefined)}
         />
       ) : null}
     </main>
   )
+}
+
+function App() {
+  const state = useWorldContent()
+
+  if (state.status === 'loading') {
+    return (
+      <main className="flex h-[100dvh] items-center justify-center bg-[#010409] text-slate-200">
+        <p className="flex items-center gap-3 text-sm font-medium text-slate-400">
+          <Loader2 className="size-4 animate-spin" />
+          正在加载 Our World…
+        </p>
+      </main>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <main className="flex h-[100dvh] items-center justify-center bg-[#010409] px-6 text-center">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-100">内容加载失败</h1>
+          <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">{state.error}</p>
+          <p className="mt-4 text-xs text-slate-500">请先运行 npm run validate 检查 content/ 内容文件。</p>
+        </div>
+      </main>
+    )
+  }
+
+  return <WorldApp content={state.content} />
 }
 
 export default App

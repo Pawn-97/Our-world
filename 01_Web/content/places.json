@@ -1,0 +1,50 @@
+[
+  {
+    "id": "place-tokyo",
+    "worldId": "world-our-world",
+    "name": "东京",
+    "nameEn": "Tokyo",
+    "country": "日本",
+    "countryEn": "Japan",
+    "countryCode": "jp",
+    "region": "East Asia",
+    "latitude": 35.6762,
+    "longitude": 139.6503,
+    "status": "visited",
+    "summary": "两个人第一次一起出远门的地方。街角、铁道和深夜食堂都值得反复回去。",
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  },
+  {
+    "id": "place-paris",
+    "worldId": "world-our-world",
+    "name": "巴黎",
+    "nameEn": "Paris",
+    "country": "法国",
+    "countryEn": "France",
+    "countryCode": "fr",
+    "region": "Western Europe",
+    "latitude": 48.8566,
+    "longitude": 2.3522,
+    "status": "planned",
+    "summary": "计划在秋天去，看博物馆、塞纳河和雨后的石板路。",
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  },
+  {
+    "id": "place-singapore",
+    "worldId": "world-our-world",
+    "name": "新加坡",
+    "nameEn": "Singapore",
+    "country": "新加坡",
+    "countryEn": "Singapore",
+    "countryCode": "sg",
+    "region": "Southeast Asia",
+    "latitude": 1.3521,
+    "longitude": 103.8198,
+    "status": "wishlist",
+    "summary": "心愿单上的花园城市，想去看滨海湾的夜景。",
+    "createdAt": "2026-08-29",
+    "updatedAt": "2026-08-29"
+  }
+]

@@ -1,4 +1,10 @@
-import type { TravelAtlasEditorState } from './editorState'
+import type { MediaEditorState } from './editorState'
+
+// Dev-only local editor API client (served by scripts/local-editor-plugin.mjs,
+// loopback-only). Milestone 2 removed the travel-record write paths
+// (/records, /countries, catalog search) because they wrote the old
+// travel-map format; place/visit/memory content is now edited directly in
+// content/*.json. Media upload/import/curation stays.
 
 type EditorResponse<T> = {
   ok: boolean
@@ -19,64 +25,13 @@ const parseResponse = async <T,>(response: Response) => {
   return body
 }
 
-export type CountrySearchOption = {
-  id: string
-  nameZh: string
-  nameEn: string
-  countryCode: string
-  centerLat: number
-  centerLng: number
-  region?: string
-}
-
-export type CitySearchOption = {
-  id: string
-  nameZh: string
-  nameEn: string
-  countryCode: string
-  lat: number
-  lng: number
-  detail: string
-}
-
-export const searchLocalCountries = async (query: string, signal?: AbortSignal) => {
-  const search = new URLSearchParams({ q: query })
-  const response = await fetch(`/__travelatlas/editor/catalog/countries?${search}`, {
-    cache: 'no-store',
-    signal,
-  })
-  return (await parseResponse<{ results: CountrySearchOption[] }>(response)).results
-}
-
-export const searchLocalCities = async (
-  query: string,
-  countryCode: string,
-  signal?: AbortSignal,
-) => {
-  const search = new URLSearchParams({ q: query, countryCode })
-  const response = await fetch(`/__travelatlas/editor/catalog/cities?${search}`, {
-    cache: 'no-store',
-    signal,
-  })
-  return (await parseResponse<{ results: CitySearchOption[] }>(response)).results
-}
-
-export const addLocalCountry = async (countryCode: string, visitedDate?: string) => {
-  const response = await fetch('/__travelatlas/editor/countries', {
-    method: 'POST',
-    headers: editorHeaders,
-    body: JSON.stringify({ countryCode, visitedDate }),
-  })
-  return parseResponse<{ countryId: string }>(response)
-}
-
 export const readLocalEditorState = async () => {
   const response = await fetch('/__travelatlas/editor/state', { cache: 'no-store' })
-  return (await parseResponse<{ state: TravelAtlasEditorState }>(response)).state
+  return (await parseResponse<{ state: MediaEditorState }>(response)).state
 }
 
 export const updateLocalEditorState = async (
-  update: (current: TravelAtlasEditorState) => TravelAtlasEditorState,
+  update: (current: MediaEditorState) => MediaEditorState,
 ) => {
   const current = await readLocalEditorState()
   const response = await fetch('/__travelatlas/editor/state', {
@@ -84,12 +39,11 @@ export const updateLocalEditorState = async (
     headers: editorHeaders,
     body: JSON.stringify(update(current)),
   })
-  return (await parseResponse<{ state: TravelAtlasEditorState }>(response)).state
+  return (await parseResponse<{ state: MediaEditorState }>(response)).state
 }
 
 export type LocalMediaUpload = {
-  countryId: string
-  cityId: string
+  placeId: string
   kind: 'photo' | 'panorama360' | 'aerialPhoto'
   file: File
   date?: string
@@ -103,8 +57,7 @@ export type LocalMediaUpload = {
 
 export const uploadLocalMedia = async (upload: LocalMediaUpload) => {
   const search = new URLSearchParams({
-    countryId: upload.countryId,
-    cityId: upload.cityId,
+    placeId: upload.placeId,
     kind: upload.kind,
     fileName: upload.file.name,
   })
@@ -136,35 +89,13 @@ export const importLocalMedia = async (sourcePaths: string[] = []) => {
   return parseResponse<{ output: string; restoredMediaIds: string[] }>(response)
 }
 
-export const deleteHiddenLocalMedia = async (cityId: string, ids: string[]) => {
+export const deleteHiddenLocalMedia = async (placeId: string, ids: string[]) => {
   const response = await fetch('/__travelatlas/editor/media/delete', {
     method: 'POST',
     headers: editorHeaders,
-    body: JSON.stringify({ cityId, ids }),
+    body: JSON.stringify({ placeId, ids }),
   })
   return parseResponse<{ deletedIds: string[]; deletedSourceFiles: number; output: string }>(response)
-}
-
-export type LocalTravelRecordInput = {
-  country: string
-  country_en: string
-  country_code?: string
-  city: string
-  city_en: string
-  start_date: string
-  end_date?: string
-  lat: number
-  lng: number
-  trip_title?: string
-}
-
-export const addLocalTravelRecord = async (input: LocalTravelRecordInput) => {
-  const response = await fetch('/__travelatlas/editor/records', {
-    method: 'POST',
-    headers: editorHeaders,
-    body: JSON.stringify(input),
-  })
-  return parseResponse<{ id: string; countryId: string; cityId: string }>(response)
 }
 
 export const reloadAfterLocalSave = () => window.location.reload()

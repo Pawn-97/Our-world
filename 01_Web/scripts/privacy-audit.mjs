@@ -27,8 +27,9 @@ const existingViolations = publicFiles.filter((filePath) =>
   isPrivateTrackedPath(filePath) && existsSync(path.join(projectRoot, filePath)),
 )
 
-const samplePath = path.join(webRoot, 'src', 'data', 'travel-map.sample.json')
-const sampleData = JSON.parse(readFileSync(samplePath, 'utf8'))
+const contentDir = path.join(webRoot, 'content')
+const requiredContentFiles = ['world', 'places', 'visits', 'memories', 'media']
+  .map((name) => `01_Web/content/${name}.json`)
 const errors = []
 
 if (publicFiles.length === 0) {
@@ -38,11 +39,13 @@ if (publicFiles.length === 0) {
 if (existingViolations.length > 0) {
   errors.push(`Private paths are tracked:\n${existingViolations.map((filePath) => `  - ${filePath}`).join('\n')}`)
 }
-if (sampleData.privacy_level !== 'public-sample') {
-  errors.push('travel-map.sample.json must declare privacy_level = public-sample.')
-}
-if (!Array.isArray(sampleData.records) || sampleData.records.length === 0) {
-  errors.push('travel-map.sample.json needs at least one runnable sample record.')
+if (!existsSync(contentDir)) {
+  errors.push('01_Web/content/ is missing; tracked world content is required.')
+} else {
+  const missingContent = requiredContentFiles.filter((filePath) => !publicFiles.includes(filePath))
+  if (missingContent.length > 0) {
+    errors.push(`Content files must be tracked in git:\n${missingContent.map((filePath) => `  - ${filePath}`).join('\n')}`)
+  }
 }
 
 if (errors.length > 0) {
@@ -52,7 +55,7 @@ if (errors.length > 0) {
 } else {
   console.log('Our World privacy audit passed.')
   console.log(`Tracked and unignored public files checked: ${publicFiles.length}`)
-  console.log(`Neutral sample records: ${sampleData.records.length}`)
-  console.log('Private Inbox, generated media, local catalogs, local travel data, and environment files are outside the tracked public boundary.')
+  console.log(`Tracked content files: ${requiredContentFiles.length} under 01_Web/content/`)
+  console.log('Private Inbox, generated media, local catalogs, local editor state, and environment files are outside the tracked public boundary.')
   console.log('Note: this checks the current tree. Publish from a clean repository so earlier private Git history is not inherited.')
 }

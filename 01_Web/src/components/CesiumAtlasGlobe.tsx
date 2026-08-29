@@ -29,37 +29,70 @@ import {
 import type { CesiumComponentRef } from 'resium'
 import { cesiumIonConfigured, createMapSourceLayers } from '../data/mapSources'
 import type { MapSourceId } from '../data/mapSources'
-import { cities, cityById, countries, countryById, journeyDays, routes, travelAtlasDisplay } from '../data/travelAtlas'
-import type { City, CityId, CountryId, SelectionMode } from '../types/travel'
+import type { PlaceRoute } from '../domain/viewModel'
+import { placeStatusLabels } from '../domain/types'
+import type {
+  CountryGroupId,
+  OverviewTarget,
+  PlaceId,
+  PlaceStatus,
+  SelectionMode,
+} from '../domain/types'
 import type { GlobeQualityMode } from '../globeQuality'
 import { CesiumConstellationSky } from './CesiumConstellationSky'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 const maxCesiumDevicePixelRatio = 2
 
+// View-model props: the globe renders product-level data only (ARCHITECTURE.md
+// §6.6). All content arrives via repositories through App/useWorldContent.
+export type GlobePlace = {
+  id: PlaceId
+  name: string
+  nameEn?: string
+  lat: number
+  lng: number
+  status: PlaceStatus
+  countryGroupId: CountryGroupId
+  visitCount: number
+}
+
+export type GlobeCountryGroup = {
+  id: CountryGroupId
+  name: string
+  nameEn?: string
+  centerLat: number
+  centerLng: number
+  accent: string
+}
+
+export type GlobeRoute = PlaceRoute & {
+  fromLat: number
+  fromLng: number
+  toLat: number
+  toLng: number
+}
+
 type CesiumAtlasGlobeProps = {
-  hoveredCountryId?: CountryId
+  places: GlobePlace[]
+  countryGroups: GlobeCountryGroup[]
+  routes: GlobeRoute[]
+  overviewTarget: OverviewTarget
+  hoveredCountryGroupId?: CountryGroupId
   imageryBrightness: number
   imageryContrast: number
   imagerySaturation: number
   mapSource: MapSourceId
-  selectedCountryId?: CountryId
-  selectedCityId?: CityId
+  selectedCountryGroupId?: CountryGroupId
+  selectedPlaceId?: PlaceId
   selectionMode: SelectionMode
   globeScale: number
   resetVersion: number
   isNight: boolean
   showMapContent?: boolean
   qualityMode?: GlobeQualityMode
-  onSelectCity: (cityId: CityId) => void
+  onSelectPlace: (placeId: PlaceId) => void
 }
-
-type MappedCity = City & {
-  lat: number
-  lng: number
-}
-
-const overviewTarget = travelAtlasDisplay.overviewTarget
 
 const cityMarkerHeight = 600
 
@@ -101,6 +134,40 @@ const cityHoverMarkerImage = (accent: string, corePixelSize: number) => {
 
   cityHoverMarkerImageCache.set(cacheKey, image)
   return image
+}
+
+// Status visual language (MVP §3A): visited = solid accent dot, planned =
+// hollow accent ring, wishlist = muted desaturated dot. The same language is
+// used by list dots and previews.
+const markerPointForStatus = (
+  status: PlaceStatus,
+  accent: string,
+  isMuted: boolean,
+  isSelected: boolean,
+) => {
+  const accentColor = Color.fromCssColorString(accent)
+
+  if (status === 'planned') {
+    return {
+      color: accentColor.withAlpha(isSelected ? 0.4 : isMuted ? 0.06 : 0.16),
+      outlineColor: accentColor.withAlpha(isMuted ? 0.3 : 0.95),
+      outlineWidth: isSelected ? 3 : 2.5,
+    }
+  }
+
+  if (status === 'wishlist') {
+    return {
+      color: Color.fromCssColorString('#94a3b8').withAlpha(isMuted ? 0.2 : 0.55),
+      outlineColor: Color.WHITE.withAlpha(isMuted ? 0.25 : 0.5),
+      outlineWidth: 1.5,
+    }
+  }
+
+  return {
+    color: accentColor.withAlpha(isMuted ? 0.28 : 1),
+    outlineColor: Color.WHITE.withAlpha(isMuted ? 0.36 : 0.94),
+    outlineWidth: isSelected ? 3 : 2,
+  }
 }
 
 type CameraScale = 'world' | 'country' | 'city' | 'street'
@@ -232,8 +299,8 @@ const debugCameraCommand = (
 }
 
 type CameraFocus =
-  | { type: 'city'; id?: CityId; lat: number; lng: number }
-  | { type: 'country'; id?: CountryId; lat: number; lng: number }
+  | { type: 'city'; id?: PlaceId; lat: number; lng: number }
+  | { type: 'country'; id?: CountryGroupId; lat: number; lng: number }
   | { type: 'overview'; id: 'overview'; lat: number; lng: number }
 
 type CameraCommandSource =
@@ -251,20 +318,24 @@ type CameraCommandRequest = {
 type ExecuteCameraCommand = (request: CameraCommandRequest) => boolean
 
 export function CesiumAtlasGlobe({
-  hoveredCountryId,
+  places,
+  countryGroups,
+  routes,
+  overviewTarget,
+  hoveredCountryGroupId,
   imageryBrightness,
   imageryContrast,
   imagerySaturation,
   mapSource,
-  selectedCountryId,
-  selectedCityId,
+  selectedCountryGroupId,
+  selectedPlaceId,
   selectionMode,
   globeScale,
   resetVersion,
   isNight,
   showMapContent = true,
   qualityMode = 'high',
-  onSelectCity,
+  onSelectPlace,
 }: CesiumAtlasGlobeProps) {
   const viewerRef = useRef<CesiumComponentRef<CesiumViewer>>(null)
   const globeShellRef = useRef<HTMLDivElement>(null)
@@ -273,11 +344,21 @@ export function CesiumAtlasGlobe({
   const [viewerReadyVersion, setViewerReadyVersion] = useState(0)
   const updateVisibleHemisphereRef = useRef<() => void>(() => undefined)
   const [focusOffset, setFocusOffset] = useState({ x: 0, y: 0 })
-  const [visibleCityIds, setVisibleCityIds] = useState<Set<CityId> | null>(null)
+  const [visiblePlaceIds, setVisiblePlaceIds] = useState<Set<PlaceId> | null>(null)
   const [visibleRouteIds, setVisibleRouteIds] = useState<Set<string> | null>(null)
-  const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : undefined
-  const selectedCity = selectedCityId ? cityById[selectedCityId] : undefined
-  const selectedAccent = selectedCountry?.accent ?? '#38bdf8'
+  const countryGroupById = useMemo(
+    () => new Map(countryGroups.map((group) => [group.id, group])),
+    [countryGroups],
+  )
+  const selectedCountryGroup = useMemo(
+    () => (selectedCountryGroupId ? countryGroupById.get(selectedCountryGroupId) : undefined),
+    [countryGroupById, selectedCountryGroupId],
+  )
+  const selectedPlace = useMemo(
+    () => places.find((place) => place.id === selectedPlaceId),
+    [places, selectedPlaceId],
+  )
+  const selectedAccent = selectedCountryGroup?.accent ?? '#38bdf8'
   const mapSourceLayers = useMemo(() => createMapSourceLayers(mapSource), [mapSource])
 
   const captureViewer = useCallback(
@@ -289,155 +370,69 @@ export function CesiumAtlasGlobe({
     [],
   )
 
-  const mappedCities = useMemo<MappedCity[]>(
-    () =>
-      cities.filter(
-        (city): city is MappedCity =>
-          typeof city.lat === 'number' && typeof city.lng === 'number',
-      ),
-    [],
-  )
-
   // Sparse datasets (e.g. the 3-place spike) keep every marker labeled and
   // slightly larger so places read clearly at world and country scale.
-  const sparseMarkerSet = mappedCities.length <= 12
+  const sparseMarkerSet = places.length <= 12
   // Coarse pointers (reduced quality mode) need bigger tap targets.
   const markerSizeBoost = qualityMode === 'reduced' ? 8 : 0
 
-  const journeyVisitCounts = useMemo(
-    () =>
-      journeyDays.reduce(
-        (counts, day) => {
-          counts[day.cityId] = (counts[day.cityId] ?? 0) + 1
-          return counts
-        },
-        {} as Record<CityId, number>,
-      ),
-    [],
-  )
-
+  // Route geometry is a rendering concern: visit-derived route pairs arrive
+  // as props (see domain/viewModel.ts deriveRoutes) and get their arc
+  // positions computed here with Cesium geodesics.
   const mappedRoutes = useMemo(
-    () => {
-      const orderedCountryRoutes = countries.flatMap((country) =>
-        country.cityIds.slice(1).flatMap((toCityId, index) => {
-          const fromCityId = country.cityIds[index]
-          const from = cityById[fromCityId]
-          const to = cityById[toCityId]
-
-          if (!from || !to) return []
-
-          const existingRoute = routes.find(
-            (route) =>
-              route.fromCityId === fromCityId &&
-              route.toCityId === toCityId,
-          )
-          const fromJourneyIds = new Set(
-            from.records?.map((record) => record.journeyId).filter(Boolean),
-          )
-          const sharedJourneyId = to.records
-            ?.map((record) => record.journeyId)
-            .find((journeyId) => journeyId && fromJourneyIds.has(journeyId))
-
-          return [{
-            id: existingRoute?.id ?? `country-order__${country.id}__${fromCityId}__${toCityId}`,
-            fromCityId,
-            toCityId,
-            journeyId: existingRoute?.journeyId ?? sharedJourneyId,
-            type: existingRoute?.type ?? 'main' as const,
-          }]
-        }),
-      )
-      const crossCountryRoutes = routes.filter((route) => {
-        const from = cityById[route.fromCityId]
-        const to = cityById[route.toCityId]
-        return from?.countryId && to?.countryId && from.countryId !== to.countryId
-      })
-
-      return [...orderedCountryRoutes, ...crossCountryRoutes].flatMap((route) => {
-        const from = cityById[route.fromCityId]
-        const to = cityById[route.toCityId]
-
-        if (
-          !route.journeyId ||
-          !from ||
-          !to ||
-          typeof from.lat !== 'number' ||
-          typeof from.lng !== 'number' ||
-          typeof to.lat !== 'number' ||
-          typeof to.lng !== 'number'
-        ) {
-          return []
-        }
-
-        return [{
-          ...route,
-          fromLat: from.lat,
-          fromLng: from.lng,
-          toLat: to.lat,
-          toLng: to.lng,
-          fromCountryId: from.countryId,
-          toCountryId: to.countryId,
-          positions: createRoutePositions(
-            from.lng,
-            from.lat,
-            to.lng,
-            to.lat,
-            route.type,
-          ),
-        }]
-      })
-    },
-    [],
+    () =>
+      routes.map((route) => ({
+        ...route,
+        positions: createRoutePositions(
+          route.fromLng,
+          route.fromLat,
+          route.toLng,
+          route.toLat,
+          route.type,
+        ),
+      })),
+    [routes],
   )
-  const activeCityRouteIds = useMemo(
+  const activePlaceRouteIds = useMemo(
     () =>
       new Set(
         mappedRoutes
           .filter(
             (route) =>
-              selectedCityId &&
-              route.fromCountryId === selectedCountryId &&
-              route.toCountryId === selectedCountryId &&
-              (route.fromCityId === selectedCityId ||
-                route.toCityId === selectedCityId),
+              selectedPlaceId &&
+              route.fromCountryGroupId === selectedCountryGroupId &&
+              route.toCountryGroupId === selectedCountryGroupId &&
+              (route.fromPlaceId === selectedPlaceId ||
+                route.toPlaceId === selectedPlaceId),
           )
           .map((route) => route.id),
       ),
-    [mappedRoutes, selectedCityId, selectedCountryId],
+    [mappedRoutes, selectedPlaceId, selectedCountryGroupId],
   )
   const activeRoutePairs = mappedRoutes
-    .filter((route) => activeCityRouteIds.has(route.id))
-    .map((route) => `${route.fromCityId}->${route.toCityId}`)
+    .filter((route) => activePlaceRouteIds.has(route.id))
+    .map((route) => `${route.fromPlaceId}->${route.toPlaceId}`)
     .join('|')
   const cameraFocus = useMemo<CameraFocus>(() => {
-    if (
-      selectionMode === 'city' &&
-      selectedCity &&
-      typeof selectedCity.lat === 'number' &&
-      typeof selectedCity.lng === 'number'
-    ) {
-      return { type: 'city', id: selectedCity.id, lat: selectedCity.lat, lng: selectedCity.lng }
+    if (selectionMode === 'place' && selectedPlace) {
+      return { type: 'city', id: selectedPlace.id, lat: selectedPlace.lat, lng: selectedPlace.lng }
     }
 
-    if (
-      selectionMode === 'country' &&
-      selectedCountry &&
-      typeof selectedCountry.centerLat === 'number' &&
-      typeof selectedCountry.centerLng === 'number'
-    ) {
+    if (selectionMode === 'country' && selectedCountryGroup) {
       return {
         type: 'country',
-        id: selectedCountry.id,
-        lat: selectedCountry.centerLat,
-        lng: selectedCountry.centerLng,
+        id: selectedCountryGroup.id,
+        lat: selectedCountryGroup.centerLat,
+        lng: selectedCountryGroup.centerLng,
       }
     }
 
     return { type: 'overview', id: 'overview', lat: overviewTarget.lat, lng: overviewTarget.lng }
   }, [
-    selectedCity,
-    selectedCountry,
+    selectedPlace,
+    selectedCountryGroup,
     selectionMode,
+    overviewTarget,
   ])
   const cameraScale = useMemo<CameraScale>(
     () => cameraScaleForGlobeScale(globeScale),
@@ -445,19 +440,19 @@ export function CesiumAtlasGlobe({
   )
   const cameraFocusKey = useMemo(() => {
     if (cameraFocus.type === 'city') {
-      return `city:${selectedCityId}:${cameraScale}`
+      return `city:${selectedPlaceId}:${cameraScale}`
     }
     if (cameraFocus.type === 'country') {
-      return `country:${selectedCountryId}:${cameraScale}`
+      return `country:${selectedCountryGroupId}:${cameraScale}`
     }
     return `overview:${cameraScale}:${resetVersion}`
-  }, [cameraFocus, cameraScale, resetVersion, selectedCityId, selectedCountryId])
+  }, [cameraFocus, cameraScale, resetVersion, selectedPlaceId, selectedCountryGroupId])
   const cameraRuntimeRef = useRef({
     cameraFocus,
     cameraScale,
     globeScale,
-    selectedCityId,
-    selectedCountryId,
+    selectedPlaceId,
+    selectedCountryGroupId,
   })
 
   useEffect(() => {
@@ -465,27 +460,27 @@ export function CesiumAtlasGlobe({
       cameraFocus,
       cameraScale,
       globeScale,
-      selectedCityId,
-      selectedCountryId,
+      selectedPlaceId,
+      selectedCountryGroupId,
     }
   }, [
     cameraFocus,
     cameraScale,
     globeScale,
-    selectedCityId,
-    selectedCountryId,
+    selectedPlaceId,
+    selectedCountryGroupId,
   ])
 
   useEffect(() => {
     debugCesiumGlobeScaleProp({
       globeScale,
-      selectedCountryId,
-      selectedCityId,
+      selectedCountryGroupId,
+      selectedPlaceId,
     })
   }, [
     globeScale,
-    selectedCityId,
-    selectedCountryId,
+    selectedPlaceId,
+    selectedCountryGroupId,
   ])
 
   const executeCameraCommand = useCallback<ExecuteCameraCommand>((request) => {
@@ -615,15 +610,15 @@ export function CesiumAtlasGlobe({
 
     const updateVisibleHemisphere = () => {
       const cameraPosition = viewer.camera.positionWC
-      const nextCityIds = new Set(
-        mappedCities
-          .filter((city) =>
+      const nextPlaceIds = new Set(
+        places
+          .filter((place) =>
             isPositionFacingCamera(
-              cityPosition(city.lng, city.lat),
+              cityPosition(place.lng, place.lat),
               cameraPosition,
             ),
           )
-          .map((city) => city.id),
+          .map((place) => place.id),
       )
       const nextRouteIds = new Set(
         mappedRoutes
@@ -635,7 +630,7 @@ export function CesiumAtlasGlobe({
           .map((route) => route.id),
       )
 
-      setVisibleCityIds((current) => setsMatch(current, nextCityIds) ? current : nextCityIds)
+      setVisiblePlaceIds((current) => setsMatch(current, nextPlaceIds) ? current : nextPlaceIds)
       setVisibleRouteIds((current) => setsMatch(current, nextRouteIds) ? current : nextRouteIds)
     }
 
@@ -667,7 +662,7 @@ export function CesiumAtlasGlobe({
       viewer.camera.moveEnd.removeEventListener(updateVisibleHemisphere)
       updateVisibleHemisphereRef.current = () => undefined
     }
-  }, [mappedCities, mappedRoutes, viewerReadyVersion])
+  }, [places, mappedRoutes, viewerReadyVersion])
 
   useEffect(() => {
     const viewer = viewerRef.current?.cesiumElement
@@ -678,8 +673,8 @@ export function CesiumAtlasGlobe({
       cameraFocus,
       cameraScale,
       globeScale,
-      selectedCityId,
-      selectedCountryId,
+      selectedPlaceId,
+      selectedCountryGroupId,
     } = cameraRuntimeRef.current
 
     debugCameraState({
@@ -688,15 +683,15 @@ export function CesiumAtlasGlobe({
       focusTargetId: cameraFocus.id,
       cameraScale,
       globeScale,
-      selectedCityId,
-      selectedCountryId,
+      selectedPlaceId,
+      selectedCountryGroupId,
     })
 
     const cameraState = cameraScaleStates[cameraScale]
     const targetPosition = Cartesian3.fromDegrees(cameraFocus.lng, cameraFocus.lat, 600)
     debugCameraFocus(cameraFocus.type, {
-      selectedCityId,
-      selectedCountryId,
+      selectedPlaceId,
+      selectedCountryGroupId,
       lat: cameraFocus.lat,
       lng: cameraFocus.lng,
       globeScale,
@@ -742,8 +737,8 @@ export function CesiumAtlasGlobe({
           scale: cameraScale,
           globeScale,
           focusType: cameraFocus.type,
-          selectedCityId,
-          selectedCountryId,
+          selectedPlaceId,
+          selectedCountryGroupId,
           target: {
             lat: cameraFocus.lat,
             lng: cameraFocus.lng,
@@ -774,8 +769,8 @@ export function CesiumAtlasGlobe({
         scale: cameraScale,
         globeScale,
         focusType: cameraFocus.type,
-        selectedCityId,
-        selectedCountryId,
+        selectedPlaceId,
+        selectedCountryGroupId,
         target: {
           lat: cameraFocus.lat,
           lng: cameraFocus.lng,
@@ -818,7 +813,7 @@ export function CesiumAtlasGlobe({
       className={`cesium-atlas-shell absolute inset-0 h-full w-full ${isNight ? 'bg-[#020817]' : 'bg-sky-100'}`}
       data-focus-offset-x={focusOffset.x}
       data-focus-offset-y={focusOffset.y}
-      data-visible-city-count={visibleCityIds?.size ?? mappedCities.length}
+      data-visible-place-count={visiblePlaceIds?.size ?? places.length}
       data-visible-route-count={visibleRouteIds?.size ?? mappedRoutes.length}
       data-active-route-pairs={activeRoutePairs}
       data-map-source={mapSource}
@@ -888,15 +883,15 @@ export function CesiumAtlasGlobe({
         />
 
         {mappedRoutes.map((route) => {
-          const isCityRoute = activeCityRouteIds.has(route.id)
+          const isPlaceRoute = activePlaceRouteIds.has(route.id)
           const isCountryRoute =
-            selectedCountryId &&
-            (route.fromCountryId === selectedCountryId || route.toCountryId === selectedCountryId)
-          const isActive = selectedCityId ? isCityRoute : Boolean(isCountryRoute)
+            selectedCountryGroupId &&
+            (route.fromCountryGroupId === selectedCountryGroupId || route.toCountryGroupId === selectedCountryGroupId)
+          const isActive = selectedPlaceId ? isPlaceRoute : Boolean(isCountryRoute)
           const isMuted = selectionMode !== 'overview' && !isActive
           const isVisible =
             (visibleRouteIds?.has(route.id) ?? true) &&
-            (selectionMode !== 'city' || isCityRoute)
+            (selectionMode !== 'place' || isPlaceRoute)
           const routeColor = Color.fromCssColorString(
             isActive ? selectedAccent : '#bae6fd',
           ).withAlpha(
@@ -911,7 +906,7 @@ export function CesiumAtlasGlobe({
           return (
             <Entity
               key={route.id}
-              name={`${route.journeyId}: ${route.fromCityId} to ${route.toCityId}`}
+              name={`${route.fromPlaceId} to ${route.toPlaceId}`}
               show={showMapContent && isVisible}
               polyline={{
                 arcType: ArcType.NONE,
@@ -928,27 +923,26 @@ export function CesiumAtlasGlobe({
           )
         })}
 
-        {mappedCities.map((city) => {
-          const isSelected = city.id === selectedCityId
-          const isHoveredCountryCity =
-            hoveredCountryId !== undefined && city.countryId === hoveredCountryId
-          const isCountryCity =
-            selectedCountryId !== undefined && city.countryId === selectedCountryId
-          const country = city.countryId ? countryById[city.countryId] : undefined
-          const accent = country?.accent ?? '#38bdf8'
-          const visitCount = journeyVisitCounts[city.id] ?? 1
+        {places.map((place) => {
+          const isSelected = place.id === selectedPlaceId
+          const isHoveredGroupPlace =
+            hoveredCountryGroupId !== undefined && place.countryGroupId === hoveredCountryGroupId
+          const isGroupPlace =
+            selectedCountryGroupId !== undefined && place.countryGroupId === selectedCountryGroupId
+          const accent = countryGroupById.get(place.countryGroupId)?.accent ?? '#38bdf8'
           const isMuted =
-            selectionMode !== 'overview' && !isSelected && !isCountryCity
-          const corePixelSize = (isCountryCity ? 12 : sparseMarkerSet ? 11 : 7) + markerSizeBoost
-          const showHoverGlow = isHoveredCountryCity && !isSelected
+            selectionMode !== 'overview' && !isSelected && !isGroupPlace
+          const corePixelSize = (isGroupPlace ? 12 : sparseMarkerSet ? 11 : 7) + markerSizeBoost
+          const showHoverGlow = isHoveredGroupPlace && !isSelected
+          const markerPoint = markerPointForStatus(place.status, accent, isMuted, isSelected)
 
           return (
             <Entity
-              key={city.id}
-              name={`${city.nameEn ?? city.nameZh ?? city.id} · ${visitCount} visit records`}
-              show={showMapContent && (visibleCityIds?.has(city.id) ?? true)}
-              position={cityPosition(city.lng, city.lat)}
-              onClick={() => onSelectCity(city.id)}
+              key={place.id}
+              name={`${place.nameEn ?? place.name} · ${placeStatusLabels[place.status]} · ${place.visitCount} visits`}
+              show={showMapContent && (visiblePlaceIds?.has(place.id) ?? true)}
+              position={cityPosition(place.lng, place.lat)}
+              onClick={() => onSelectPlace(place.id)}
               billboard={showHoverGlow ? {
                 color: Color.WHITE,
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -957,10 +951,10 @@ export function CesiumAtlasGlobe({
                 width: 38,
               } : undefined}
               point={showHoverGlow ? undefined : {
-                color: Color.fromCssColorString(accent).withAlpha(isMuted ? 0.28 : 1),
+                color: markerPoint.color,
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
-                outlineColor: Color.WHITE.withAlpha(isMuted ? 0.36 : 0.94),
-                outlineWidth: isSelected ? 3 : 2,
+                outlineColor: markerPoint.outlineColor,
+                outlineWidth: markerPoint.outlineWidth,
                 pixelSize: isSelected ? 18 + markerSizeBoost : corePixelSize,
               }}
               label={{
@@ -973,10 +967,10 @@ export function CesiumAtlasGlobe({
                 outlineColor: Color.BLACK,
                 outlineWidth: 2,
                 pixelOffset: new Cartesian2(0, -28),
-                show: sparseMarkerSet || isSelected || isCountryCity,
+                show: sparseMarkerSet || isSelected || isGroupPlace,
                 showBackground: true,
                 style: LabelStyle.FILL_AND_OUTLINE,
-                text: city.nameEn ?? city.nameZh ?? city.id,
+                text: place.nameEn ?? place.name,
               }}
               ellipse={isSelected ? {
                 height: 300,
@@ -992,7 +986,7 @@ export function CesiumAtlasGlobe({
       </Viewer>
 
       <div className="cesium-map-status pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/14 bg-slate-950/62 px-4 py-2 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur-2xl">
-        {mappedCities.length} mapped cities · {mappedRoutes.length} route segments
+        {places.length} places · {mappedRoutes.length} route segments
       </div>
     </div>
   )

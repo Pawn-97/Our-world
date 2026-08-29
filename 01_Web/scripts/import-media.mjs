@@ -12,8 +12,7 @@ const inboxRoot = path.join(projectRoot, '02_Assets', 'MediaInbox')
 const outputRoot = path.join(webRoot, 'public', 'media', 'user')
 const catalogPath = path.join(webRoot, 'src', 'data', 'generated', 'user-media.local.json')
 const sourceIndexPath = path.join(webRoot, 'src', 'data', 'generated', 'media-source-index.local.json')
-const localTravelDataPath = path.join(webRoot, 'src', 'data', 'generated', 'travel-map.local.json')
-const sampleTravelDataPath = path.join(webRoot, 'src', 'data', 'travel-map.sample.json')
+const placesContentPath = path.join(webRoot, 'content', 'places.json')
 const shouldApply = process.argv.includes('--apply')
 
 const stillExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif'])
@@ -147,64 +146,59 @@ function addAlias(aliasMap, value, entity) {
   }
 }
 
+// Location index built from the tracked domain content (content/places.json).
+// Inbox folders are `<Country>/<Place>/photos|drone`; folder names match
+// against place names (中文/English), place ids, and slugs. Catalog entries
+// carry the owning place slug (placeId) — the clean mapping into the domain.
 async function createLocationIndex() {
-  const travelDataPath = await pathExists(localTravelDataPath) ? localTravelDataPath : sampleTravelDataPath
-  const travelData = await readJson(travelDataPath, '旅行地图数据')
-  if (!travelData?.records || !Array.isArray(travelData.records)) return undefined
-  const configuredCountryAliases = travelData.display?.countryAliases ?? {}
+  const places = await readJson(placesContentPath, '地点内容')
+  if (!Array.isArray(places)) return undefined
 
   const countriesById = new Map()
 
-  for (const record of travelData.records.filter((item) => item.status !== 'planned')) {
-    const countryAlias = configuredCountryAliases[record.country_en]
-    const normalizedCountryEn = countryAlias?.country_en ?? record.country_en ?? record.country
-    const normalizedCountryZh = countryAlias?.country ?? record.country
-    const countryId = slugify(normalizedCountryEn)
+  for (const place of places) {
+    if (!place || typeof place.id !== 'string') continue
+    const countryNameEn = place.countryEn ?? place.country
+    const countryId = slugify(countryNameEn ?? '')
     if (!countryId) continue
 
     let country = countriesById.get(countryId)
     if (!country) {
       country = {
         id: countryId,
-        nameEn: normalizedCountryEn,
-        nameZh: normalizedCountryZh,
+        nameEn: countryNameEn,
+        nameZh: place.country ?? countryNameEn,
         aliases: new Set(),
-        citiesById: new Map(),
-        cityAliases: new Map(),
+        placesById: new Map(),
+        placeAliases: new Map(),
       }
       countriesById.set(countryId, country)
     }
+    country.aliases.add(place.country)
+    country.aliases.add(countryNameEn)
+    country.aliases.add(country.id)
 
-    country.aliases.add(record.country)
-    country.aliases.add(normalizedCountryZh)
-    country.aliases.add(record.country_en)
-    country.aliases.add(normalizedCountryEn)
-
-    const cityNameEn = record.city_en || record.city || record.id
-    const cityId = `${countryId}__${slugify(cityNameEn)}`
-    let city = country.citiesById.get(cityId)
-    if (!city) {
-      city = {
-        id: cityId,
-        countryId,
-        nameEn: cityNameEn,
-        nameZh: record.city,
-        aliases: new Set(),
-      }
-      country.citiesById.set(cityId, city)
+    const placeEntry = {
+      id: place.id,
+      countryId,
+      nameEn: place.nameEn ?? place.name,
+      nameZh: place.name ?? place.nameEn,
+      aliases: new Set(),
     }
-    city.aliases.add(record.city)
-    city.aliases.add(record.city_en)
-    city.aliases.add(cityNameEn)
+    country.placesById.set(place.id, placeEntry)
+    placeEntry.aliases.add(place.name)
+    placeEntry.aliases.add(place.nameEn)
+    placeEntry.aliases.add(place.id)
+    placeEntry.aliases.add(slugify(placeEntry.nameEn ?? ''))
   }
 
   const countryAliases = new Map()
   for (const country of countriesById.values()) {
     addAlias(countryAliases, country.id, country)
     for (const alias of country.aliases) addAlias(countryAliases, alias, country)
-    for (const city of country.citiesById.values()) {
-      addAlias(country.cityAliases, city.id, city)
-      for (const alias of city.aliases) addAlias(country.cityAliases, alias, city)
+    for (const placeEntry of country.placesById.values()) {
+      addAlias(country.placeAliases, placeEntry.id, placeEntry)
+      for (const alias of placeEntry.aliases) addAlias(country.placeAliases, alias, placeEntry)
     }
   }
 
@@ -237,20 +231,20 @@ function resolveCountry(folderName, countryConfig, locationIndex) {
     return undefined
   }
   if (!match) {
-    errors.push(`找不到国家：${folderName}。目录名需与 Our World 中英文国家名一致。`)
+    errors.push(`找不到国家：${folderName}。目录名需与 content/places.json 中的国家名一致。`)
     return undefined
   }
   return match
 }
 
-function resolveCity(folderName, country) {
-  const match = country.cityAliases.get(normalizeName(folderName))
+function resolvePlace(folderName, country) {
+  const match = country.placeAliases.get(normalizeName(folderName))
   if (match === null) {
-    errors.push(`${country.nameEn} 内的城市目录名称存在歧义：${folderName}`)
+    errors.push(`${country.nameEn} 内的地点目录名称存在歧义：${folderName}`)
     return undefined
   }
   if (!match) {
-    errors.push(`在 ${country.nameEn} 中找不到城市：${folderName}。请先把该城市加入 Our World 数据。`)
+    errors.push(`在 ${country.nameEn} 中找不到地点：${folderName}。请先把该地点加入 content/places.json。`)
     return undefined
   }
   return match
@@ -270,34 +264,23 @@ function validateExtension(filePath, kind) {
   return undefined
 }
 
-function metadataForFile(metadata, cityRoot, filePath) {
+function metadataForFile(metadata, placeRoot, filePath) {
   if (!metadata || typeof metadata !== 'object') return {}
-  const relativeKey = toPosix(path.relative(cityRoot, filePath))
+  const relativeKey = toPosix(path.relative(placeRoot, filePath))
   return metadata[relativeKey] ?? metadata[path.basename(filePath)] ?? {}
 }
 
-function resolveMetadataLocation(metadata, fallbackCountry, fallbackCity, locationIndex, filePath) {
-  const countryId = typeof metadata.countryId === 'string' ? metadata.countryId.trim() : ''
-  const cityId = typeof metadata.cityId === 'string' ? metadata.cityId.trim() : ''
-  if (!countryId && !cityId) return { country: fallbackCountry, city: fallbackCity }
+function resolveMetadataLocation(metadata, fallbackCountry, fallbackPlace, locationIndex, filePath) {
+  const placeId = typeof metadata.placeId === 'string' ? metadata.placeId.trim() : ''
+  if (!placeId) return { country: fallbackCountry, place: fallbackPlace }
 
   const relativePath = path.relative(inboxRoot, filePath)
-  if (!countryId || !cityId) {
-    errors.push(`${relativePath} 的归属覆盖必须同时填写 countryId 和 cityId。`)
-    return undefined
+  for (const country of locationIndex.countriesById.values()) {
+    const place = country.placesById.get(placeId)
+    if (place) return { country, place }
   }
-
-  const country = locationIndex.countriesById.get(countryId)
-  if (!country) {
-    errors.push(`${relativePath} 指定了不存在的 countryId：${countryId}`)
-    return undefined
-  }
-  const city = country.citiesById.get(cityId)
-  if (!city) {
-    errors.push(`${relativePath} 指定了不属于 ${country.nameEn} 的 cityId：${cityId}`)
-    return undefined
-  }
-  return { country, city }
+  errors.push(`${relativePath} 指定了不存在的 placeId：${placeId}`)
+  return undefined
 }
 
 function droneKindForFile(filePath, metadata) {
@@ -325,7 +308,7 @@ function hasValidPosition(position) {
     && position.lng <= 180
 }
 
-async function planFile({ filePath, kind, country, city, metadata = {} }) {
+async function planFile({ filePath, kind, country, place, metadata = {} }) {
   const extension = validateExtension(filePath, kind)
   if (!extension) return
 
@@ -338,8 +321,8 @@ async function planFile({ filePath, kind, country, city, metadata = {} }) {
 
   const digest = await sha256(filePath)
   const shortHash = digest.slice(0, 16)
-  const cityPart = slugify(city.nameEn)
-  const outputDirectory = path.join(outputRoot, country.id, cityPart, kind, shortHash)
+  const placePart = slugify(place.nameEn ?? place.nameZh ?? place.id)
+  const outputDirectory = path.join(outputRoot, country.id, placePart, kind, shortHash)
   const outputPath = path.join(outputDirectory, `original${extension}`)
   const src = publicSrc(outputPath)
   const isStill = kind !== 'video' && stillExtensions.has(extension)
@@ -397,13 +380,10 @@ async function planFile({ filePath, kind, country, city, metadata = {} }) {
   plannedItems.push({
     id: typeof metadata.id === 'string' && metadata.id.trim()
       ? metadata.id.trim()
-      : `${country.id}-${cityPart}-${kind}-${shortHash}`,
+      : `media-${placePart}-${kind}-${shortHash}`,
     kind,
-    scope: 'city',
-    countryId: country.id,
-    countryName: country.nameEn,
-    cityId: city.id,
-    cityName: city.nameEn,
+    placeId: place.id,
+    placeName: place.nameEn ?? place.nameZh,
     src,
     variants,
     ...(dimensions ?? {}),
@@ -429,52 +409,52 @@ async function planFile({ filePath, kind, country, city, metadata = {} }) {
   })
 }
 
-async function scanPhotos(photosRoot, country, city) {
+async function scanPhotos(photosRoot, country, place) {
   if (!photosRoot) return
   for (const filePath of await listMediaFiles(photosRoot)) {
-    await planFile({ filePath, kind: 'photo', country, city })
+    await planFile({ filePath, kind: 'photo', country, place })
   }
 }
 
-async function scanDrone(droneRoot, country, city, cityRoot, locationIndex) {
+async function scanDrone(droneRoot, country, place, placeRoot, locationIndex) {
   if (!droneRoot) return
-  const cityMetadataPath = path.join(cityRoot, 'media.json')
+  const placeMetadataPath = path.join(placeRoot, 'media.json')
   const droneMetadataPath = path.join(droneRoot, 'media.json')
-  const metadataPath = await pathExists(cityMetadataPath) ? cityMetadataPath : droneMetadataPath
+  const metadataPath = await pathExists(placeMetadataPath) ? placeMetadataPath : droneMetadataPath
   const metadata = metadataPath
-    ? await readJson(metadataPath, `${country.nameEn}/${city.nameEn}/media.json`)
+    ? await readJson(metadataPath, `${country.nameEn}/${place.nameEn}/media.json`)
     : {}
 
   for (const filePath of await listMediaFiles(droneRoot)) {
-    const fileMetadata = metadataForFile(metadata, cityRoot, filePath)
-    const location = resolveMetadataLocation(fileMetadata, country, city, locationIndex, filePath)
+    const fileMetadata = metadataForFile(metadata, placeRoot, filePath)
+    const location = resolveMetadataLocation(fileMetadata, country, place, locationIndex, filePath)
     if (!location) continue
     await planFile({
       filePath,
       kind: droneKindForFile(filePath, fileMetadata),
       country: location.country,
-      city: location.city,
+      place: location.place,
       metadata: fileMetadata,
     })
   }
 }
 
-async function scanCity(cityRoot, country, city, locationIndex) {
-  const directMedia = (await readdir(cityRoot, { withFileTypes: true }))
+async function scanPlace(placeRoot, country, place, locationIndex) {
+  const directMedia = (await readdir(placeRoot, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && !ignoredControlExtensions.has(path.extname(entry.name).toLowerCase()))
   if (directMedia.length > 0) {
-    errors.push(`${country.nameEn}/${city.nameEn} 根目录有 ${directMedia.length} 个媒体文件；请放入 photos 或 drone。`)
+    errors.push(`${country.nameEn}/${place.nameEn} 根目录有 ${directMedia.length} 个媒体文件；请放入 photos 或 drone。`)
   }
 
-  const photosRoot = await findNamedRoot(cityRoot, photoFolderAliases, '普通照片')
-  const droneRoot = await findNamedRoot(cityRoot, droneFolderAliases, '无人机')
-  await scanPhotos(photosRoot, country, city)
-  await scanDrone(droneRoot, country, city, cityRoot, locationIndex)
+  const photosRoot = await findNamedRoot(placeRoot, photoFolderAliases, '普通照片')
+  const droneRoot = await findNamedRoot(placeRoot, droneFolderAliases, '无人机')
+  await scanPhotos(photosRoot, country, place)
+  await scanDrone(droneRoot, country, place, placeRoot, locationIndex)
 
   const allowedFolderNames = new Set([...photoFolderAliases, ...droneFolderAliases])
-  for (const entry of await listDirectories(cityRoot)) {
+  for (const entry of await listDirectories(placeRoot)) {
     if (!entry.name.startsWith('_') && !allowedFolderNames.has(normalizeName(entry.name))) {
-      warnings.push(`${country.nameEn}/${city.nameEn}/${entry.name} 不是 photos 或 drone，已忽略。`)
+      warnings.push(`${country.nameEn}/${place.nameEn}/${entry.name} 不是 photos 或 drone，已忽略。`)
     }
   }
 }
@@ -482,7 +462,7 @@ async function scanCity(cityRoot, country, city, locationIndex) {
 function markCovers(items) {
   const groups = new Map()
   for (const item of items.filter((candidate) => candidate.kind === 'photo')) {
-    const key = item.cityId
+    const key = item.placeId
     groups.set(key, [...(groups.get(key) ?? []), item])
   }
 
@@ -530,7 +510,7 @@ async function applyPlan(items, allItems) {
   })
   await mkdir(path.dirname(catalogPath), { recursive: true })
   await writeFile(catalogPath, `${JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     privacyLevel: 'local-only',
     items: publicItems,
@@ -593,22 +573,22 @@ async function main() {
       const countryRootMedia = (await readdir(countryRoot, { withFileTypes: true }))
         .filter((entry) => entry.isFile() && !ignoredControlExtensions.has(path.extname(entry.name).toLowerCase()))
       if (countryRootMedia.length > 0) {
-        errors.push(`${country.nameEn} 根目录有 ${countryRootMedia.length} 个媒体文件；最小单位是城市，请先建立城市目录。`)
+        errors.push(`${country.nameEn} 根目录有 ${countryRootMedia.length} 个媒体文件；最小单位是地点，请先建立地点目录。`)
       }
 
-      for (const cityEntry of await listDirectories(countryRoot)) {
-        const cityRoot = path.join(countryRoot, cityEntry.name)
-        if (cityEntry.name.startsWith('_')) {
-          const unresolvedFiles = await listMediaFiles(cityRoot)
+      for (const placeEntry of await listDirectories(countryRoot)) {
+        const placeRoot = path.join(countryRoot, placeEntry.name)
+        if (placeEntry.name.startsWith('_')) {
+          const unresolvedFiles = await listMediaFiles(placeRoot)
           if (unresolvedFiles.length > 0) {
-            errors.push(`${country.nameEn}/${cityEntry.name} 中还有 ${unresolvedFiles.length} 个文件；请让 Agent 确认城市后再导入。`)
+            errors.push(`${country.nameEn}/${placeEntry.name} 中还有 ${unresolvedFiles.length} 个文件；请让 Agent 确认地点后再导入。`)
           }
           continue
         }
 
-        const city = resolveCity(cityEntry.name, country)
-        if (!city) continue
-        await scanCity(cityRoot, country, city, locationIndex)
+        const place = resolvePlace(placeEntry.name, country)
+        if (!place) continue
+        await scanPlace(placeRoot, country, place, locationIndex)
       }
     }
   }
