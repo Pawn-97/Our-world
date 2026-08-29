@@ -19,8 +19,8 @@ const jsonResponse = (body: unknown, status = 200) =>
 const catalogItem = {
   id: 'media-imported-test-1',
   kind: 'photo',
-  placeId: 'place-tokyo',
-  placeName: 'Tokyo',
+  placeId: 'place-beijing',
+  placeName: 'Beijing',
   src: '/media/user/test/photo.jpg',
   originalFileName: 'photo.jpg',
   isCover: false,
@@ -39,8 +39,8 @@ const stubMediaEndpoints = () => {
         state: {
           schemaVersion: 1,
           mediaOrderByPlace: {},
-          hiddenMediaIds: ['media-tokyo-sakura-ueno-park'],
-          coverMediaByPlace: { 'place-tokyo': 'media-imported-test-1' },
+          hiddenMediaIds: ['media-beijing-sample-01'],
+          coverMediaByPlace: { 'place-beijing': 'media-imported-test-1' },
         },
       })
     }
@@ -61,28 +61,28 @@ describe('localMediaRepository (dev in-place refresh)', () => {
     await refreshLocalMediaCache()
 
     const repository = createLocalMediaRepository()
-    const tokyoMedia = await repository.listForPlace('place-tokyo')
+    const beijingMedia = await repository.listForPlace('place-beijing')
     // Newly imported catalog item is visible without a reload.
-    expect(tokyoMedia.map((item) => item.id)).toContain('media-imported-test-1')
+    expect(beijingMedia.map((item) => item.id)).toContain('media-imported-test-1')
     // Curation state hid one bundled item and chose the new cover.
-    expect(tokyoMedia.map((item) => item.id)).not.toContain('media-tokyo-sakura-ueno-park')
-    expect(getMediaEditorState().hiddenMediaIds).toEqual(['media-tokyo-sakura-ueno-park'])
-    const cover = await repository.getCoverForPlace({ id: 'place-tokyo' } as Parameters<typeof repository.getCoverForPlace>[0])
+    expect(beijingMedia.map((item) => item.id)).not.toContain('media-beijing-sample-01')
+    expect(getMediaEditorState().hiddenMediaIds).toEqual(['media-beijing-sample-01'])
+    const cover = await repository.getCoverForPlace({ id: 'place-beijing' } as Parameters<typeof repository.getCoverForPlace>[0])
     expect(cover?.id).toBe('media-imported-test-1')
-    const hidden = await repository.listHiddenIdsForPlace('place-tokyo')
-    expect(hidden).toContain('media-tokyo-sakura-ueno-park')
+    const hidden = await repository.listHiddenIdsForPlace('place-beijing')
+    expect(hidden).toContain('media-beijing-sample-01')
   })
 
   it('primeLocalMediaCache keeps the current caches when the middleware is unreachable', async () => {
     const stateBefore = getMediaEditorState()
     const repository = createLocalMediaRepository()
-    const mediaBefore = await repository.listForPlace('place-tokyo')
+    const mediaBefore = await repository.listForPlace('place-beijing')
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('connection refused')
     }))
 
     await expect(primeLocalMediaCache()).resolves.toBeUndefined()
     expect(getMediaEditorState()).toBe(stateBefore)
-    expect(await createLocalMediaRepository().listForPlace('place-tokyo')).toEqual(mediaBefore)
+    expect(await createLocalMediaRepository().listForPlace('place-beijing')).toEqual(mediaBefore)
   })
 })

@@ -1,33 +1,56 @@
 [
   {
-    "id": "visit-tokyo-2023-10",
-    "placeId": "place-tokyo",
-    "startDate": "2023-10-02",
-    "endDate": "2023-10-07",
-    "title": "初见东京",
-    "summary": "第一次一起去东京，住在浅草附近，每天走到腿软。",
-    "createdAt": "2026-08-29",
-    "updatedAt": "2026-08-29"
+    "id": "visit-semporna-2025-01",
+    "placeId": "place-semporna",
+    "startDate": "2025-01-01",
+    "title": "首次到访（日期待补充）",
+    "summary": "第一次到访的记录，日期与细节待补充。",
+    "createdAt": "2026-08-30",
+    "updatedAt": "2026-08-30"
   },
   {
-    "id": "visit-tokyo-2025-04",
-    "placeId": "place-tokyo",
-    "startDate": "2025-04-02",
-    "endDate": "2025-04-06",
-    "title": "樱花季再访",
-    "summary": "赶在樱花满开的一周回去，补上了上次没走到的地方。",
-    "createdAt": "2026-08-29",
-    "updatedAt": "2026-08-29"
+    "id": "visit-kuala-lumpur-2025-01",
+    "placeId": "place-kuala-lumpur",
+    "startDate": "2025-01-01",
+    "title": "首次到访（日期待补充）",
+    "summary": "第一次到访的记录，日期与细节待补充。",
+    "createdAt": "2026-08-30",
+    "updatedAt": "2026-08-30"
   },
   {
-    "id": "visit-paris-2026-10",
-    "placeId": "place-paris",
-    "status": "planned",
-    "startDate": "2026-10-03",
-    "endDate": "2026-10-10",
-    "title": "秋日巴黎计划",
-    "summary": "计划中的第一次巴黎之行：奥赛、卢浮宫、塞纳河左岸，留一天什么都不安排。",
-    "createdAt": "2026-08-29",
-    "updatedAt": "2026-08-29"
+    "id": "visit-suzhou-2025-01",
+    "placeId": "place-suzhou",
+    "startDate": "2025-01-01",
+    "title": "首次到访（日期待补充）",
+    "summary": "第一次到访的记录，日期与细节待补充。",
+    "createdAt": "2026-08-30",
+    "updatedAt": "2026-08-30"
+  },
+  {
+    "id": "visit-chongqing-2025-01",
+    "placeId": "place-chongqing",
+    "startDate": "2025-01-01",
+    "title": "首次到访（日期待补充）",
+    "summary": "第一次到访的记录，日期与细节待补充。",
+    "createdAt": "2026-08-30",
+    "updatedAt": "2026-08-30"
+  },
+  {
+    "id": "visit-shanghai-2025-01",
+    "placeId": "place-shanghai",
+    "startDate": "2025-01-01",
+    "title": "首次到访（日期待补充）",
+    "summary": "第一次到访的记录，日期与细节待补充。",
+    "createdAt": "2026-08-30",
+    "updatedAt": "2026-08-30"
+  },
+  {
+    "id": "visit-beijing-2025-01",
+    "placeId": "place-beijing",
+    "startDate": "2025-01-01",
+    "title": "首次到访（日期待补充）",
+    "summary": "第一次到访的记录，日期与细节待补充。",
+    "createdAt": "2026-08-30",
+    "updatedAt": "2026-08-30"
   }
 ]

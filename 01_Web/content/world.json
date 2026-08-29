@@ -2,7 +2,7 @@
   "id": "world-our-world",
   "name": "Our World",
   "slug": "our-world",
-  "overviewTarget": { "lat": 25, "lng": 60 },
+  "overviewTarget": { "lat": 27, "lng": 112 },
   "createdAt": "2026-08-29",
-  "updatedAt": "2026-08-29"
+  "updatedAt": "2026-08-30"
 }
