@@ -79,7 +79,7 @@ export function PlaceDetailOverlay({ city, country, onClose, onOpenPhotos }: Pla
       role="dialog"
       aria-modal="true"
       aria-label={`${cityName} 详情`}
-      className="place-detail-overlay fixed inset-0 z-[70] overflow-y-auto bg-[#020817]/97 text-slate-100"
+      className="place-detail-overlay fixed inset-0 z-[70] overflow-y-auto bg-[#020817] text-slate-100"
     >
       <div className="relative h-[36vh] min-h-[220px] w-full overflow-hidden sm:h-[42vh]">
         {coverPhoto ? (

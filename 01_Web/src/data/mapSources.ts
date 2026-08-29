@@ -24,6 +24,10 @@ type MapSourceLayers = {
 
 const cesiumIonToken = (import.meta.env.VITE_CESIUM_ION_TOKEN ?? '').trim()
 const tiandituToken = (import.meta.env.VITE_TIANDITU_TOKEN ?? '').trim()
+
+// Whether a Cesium ion token is available. Gates ion-based extras such as
+// OSM Buildings independently of which imagery source the user picked.
+export const cesiumIonConfigured = Boolean(cesiumIonToken)
 const configuredDefault = (import.meta.env.VITE_MAP_SOURCE ?? 'auto').trim().toLowerCase()
 const mapSourceStorageKey = 'our-world:map-source'
 const tiandituSubdomains = ['0', '1', '2', '3', '4', '5', '6', '7']

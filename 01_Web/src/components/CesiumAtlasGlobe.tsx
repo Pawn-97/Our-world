@@ -27,7 +27,7 @@ import {
   Viewer,
 } from 'resium'
 import type { CesiumComponentRef } from 'resium'
-import { createMapSourceLayers } from '../data/mapSources'
+import { cesiumIonConfigured, createMapSourceLayers } from '../data/mapSources'
 import type { MapSourceId } from '../data/mapSources'
 import { cities, cityById, countries, countryById, journeyDays, routes, travelAtlasDisplay } from '../data/travelAtlas'
 import type { City, CityId, CountryId, SelectionMode } from '../types/travel'
@@ -512,10 +512,11 @@ export function CesiumAtlasGlobe({
   }, [qualityMode, viewerReadyVersion])
 
   // Cesium OSM Buildings (ion asset 96188) for city/street drill-in.
-  // Only in high quality mode with the Cesium ion imagery source active;
-  // skipped entirely for reduced mode and local/tianditu imagery.
+  // Loaded once the viewer is ready, in high quality mode, whenever a Cesium
+  // ion token is configured — independent of the chosen imagery source, so a
+  // persisted local/tianditu imagery choice cannot silently disable it.
   useEffect(() => {
-    if (qualityMode !== 'high' || mapSource !== 'cesium') return undefined
+    if (qualityMode !== 'high' || !cesiumIonConfigured) return undefined
 
     const viewer = viewerRef.current?.cesiumElement
     if (!viewer) return undefined
@@ -543,7 +544,7 @@ export function CesiumAtlasGlobe({
         tileset = undefined
       }
     }
-  }, [mapSource, qualityMode, viewerReadyVersion])
+  }, [qualityMode, viewerReadyVersion])
 
   useEffect(() => {
     if (cameraScale !== 'world') return undefined
