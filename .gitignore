@@ -49,3 +49,6 @@ private_key.pem
 
 # Project archive kept out of version control
 our-world-project-docs.zip
+
+# Local editor write backups (dev-only artifacts)
+01_Web/content/*.bak
