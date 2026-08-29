@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
+import { localContentStore } from './content-store.mjs'
 
 // Loopback-only Vite middleware for the local editor (dev server only; the
 // production build has no write APIs). Milestone 2 removed the old
-// travel-record endpoints (/records, /countries, catalog search) — place,
-// visit and memory content is maintained in the tracked content/*.json files.
-// What remains is the media pipeline: editor state (order/hide/cover),
-// /upload, /import, /media/delete and /media/user/* serving.
+// travel-record endpoints (/records, /countries, catalog search). Milestone 5
+// adds content CRUD (places/visits/memories) via scripts/content-store.mjs —
+// every mutation is validated with the same rules as `npm run validate`
+// before anything hits disk.
 
 const execFileAsync = promisify(execFile)
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -450,7 +451,42 @@ export function travelAtlasLocalEditor() {
             return sendJson(response, 200, { ok: true, state })
           }
 
+          // Content read-back for in-place refresh after saves (loopback only,
+          // dev server only; production serves bundled content instead).
+          if (request.method === 'GET' && url.pathname === '/__travelatlas/editor/content') {
+            if (!isLoopbackRequest(request)) return sendJson(response, 403, { ok: false, error: '仅允许本机编辑会话读取。' })
+            const content = await localContentStore.readAll()
+            return sendJson(response, 200, { ok: true, content })
+          }
+
           if (!authorizeWrite(request)) return sendJson(response, 403, { ok: false, error: '仅允许本机编辑会话写入。' })
+
+          const contentEntityMatch = url.pathname.match(/^\/__travelatlas\/editor\/content\/(places|visits|memories)$/)
+          if (request.method === 'POST' && contentEntityMatch) {
+            const entity = contentEntityMatch[1]
+            const input = await readJsonBody(request)
+            try {
+              if (input?.op === 'upsert') {
+                if (!input.record || typeof input.record !== 'object') throw new Error('缺少要保存的记录。')
+                if (entity === 'places') await localContentStore.upsertPlace(input.record)
+                else if (entity === 'visits') await localContentStore.upsertVisit(input.record)
+                else await localContentStore.upsertMemory(input.record, typeof input.placeId === 'string' ? input.placeId : undefined)
+              } else if (input?.op === 'delete') {
+                if (typeof input.id !== 'string' || !input.id) throw new Error('缺少要删除的 id。')
+                if (entity === 'places') await localContentStore.deletePlace(input.id)
+                else if (entity === 'visits') await localContentStore.deleteVisit(input.id)
+                else await localContentStore.deleteMemory(input.id)
+              } else {
+                throw new Error('未知的编辑操作。')
+              }
+            } catch (error) {
+              if (Array.isArray(error?.validation)) {
+                return sendJson(response, 422, { ok: false, error: error.message, validation: error.validation })
+              }
+              throw error
+            }
+            return sendJson(response, 200, { ok: true })
+          }
 
           if (request.method === 'PUT' && url.pathname === '/__travelatlas/editor/state') {
             const state = normalizeState(await readJsonBody(request))

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react'
+import { Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, RotateCcw } from 'lucide-react'
 import { useWorldContent } from './app/useWorldContent'
 import type { WorldContent } from './app/useWorldContent'
 import { AtlasHeader } from './components/AtlasHeader'
@@ -12,10 +12,14 @@ import { PlacePreviewSheet } from './components/PlacePreviewSheet'
 import { PlaceDetailOverlay } from './components/PlaceDetailOverlay'
 import { PlacePhotoGalleryModal } from './components/PlacePhotoGalleryModal'
 import type { PlacePhotoGalleryRequest } from './components/PlacePhotoGalleryModal'
+import { PlaceEditorSheet } from './components/editor/PlaceEditorSheet'
+import { VisitEditorSheet } from './components/editor/VisitEditorSheet'
+import { MemoryEditorSheet } from './components/editor/MemoryEditorSheet'
+import { localEditorAvailable } from './data/editorState'
 import { getInitialMapSource, rememberMapSource } from './data/mapSources'
 import type { MapSourceId } from './data/mapSources'
 import { countryGroupIdForPlace } from './domain/viewModel'
-import type { CountryGroupId, PlaceId, SelectionMode } from './domain/types'
+import type { CountryGroupId, Memory, MemoryId, Place, PlaceId, SelectionMode, Visit, VisitId } from './domain/types'
 import { detectGlobeQualityMode } from './globeQuality'
 import type { GlobeQualityMode } from './globeQuality'
 
@@ -35,6 +39,15 @@ type ImageryTuning = {
   saturation: number
 }
 
+// Local editor (Milestone 5): which editor sheet is open, if any. 'create'
+// carries the parent ids needed to attach the new record; 'edit' carries the
+// existing record.
+type PlaceEditorState = { mode: 'create' } | { mode: 'edit'; place: Place }
+type VisitEditorState = { mode: 'create'; placeId: PlaceId } | { mode: 'edit'; visit: Visit }
+type MemoryEditorState =
+  | { mode: 'create'; visitId: VisitId; placeId: PlaceId }
+  | { mode: 'edit'; memory: Memory; placeId: PlaceId }
+
 const imageryTuningDefaults: Record<ThemeMode, ImageryTuning> = {
   day: { brightness: 1, contrast: 1, saturation: 1 },
   night: { brightness: 0.68, contrast: 1.08, saturation: 0.86 },
@@ -47,7 +60,7 @@ const cameraScaleForDistance = (distance: number): CameraScale => {
   return 'world'
 }
 
-function WorldApp({ content }: { content: WorldContent }) {
+function WorldApp({ content, refresh }: { content: WorldContent; refresh: () => Promise<void> }) {
   const [selectedCountryGroupId, setSelectedCountryGroupId] = useState<CountryGroupId | undefined>()
   const [selectedPlaceId, setSelectedPlaceId] = useState<PlaceId | undefined>()
   const [hoveredCountryGroupId, setHoveredCountryGroupId] = useState<CountryGroupId | undefined>()
@@ -58,6 +71,13 @@ function WorldApp({ content }: { content: WorldContent }) {
   const [mapSource, setMapSource] = useState<MapSourceId>(getInitialMapSource)
   const [placePhotoGallery, setPlacePhotoGallery] = useState<PlacePhotoGalleryRequest>()
   const [placeDetailOpen, setPlaceDetailOpen] = useState(false)
+  // Edit mode (dev-only, Milestone 5): every editing entry point in the UI is
+  // gated behind this toggle; the dock pencil button only exists when the
+  // local editor is available, so production builds render nothing.
+  const [editMode, setEditMode] = useState(false)
+  const [placeEditor, setPlaceEditor] = useState<PlaceEditorState>()
+  const [visitEditor, setVisitEditor] = useState<VisitEditorState>()
+  const [memoryEditor, setMemoryEditor] = useState<MemoryEditorState>()
   const [sidebarsOpen, setSidebarsOpen] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(sidebarMediaQuery).matches,
   )
@@ -77,6 +97,31 @@ function WorldApp({ content }: { content: WorldContent }) {
   // Idle auto-hide only applies to the wide desktop layout; narrow screens
   // keep their default-hidden overlay panels.
   const panelsVisible = sidebarsOpen && !panelsIdleHidden
+  const editEnabled = localEditorAvailable && editMode
+
+  // Content delete handlers (dev-only): dynamic import inside a DEV guard so
+  // the production bundle contains no editor endpoint strings.
+  const deletePlace = async (placeId: PlaceId) => {
+    if (!import.meta.env.DEV) return
+    const { deleteLocalContentEntity } = await import('./data/localContentEditorApi')
+    await deleteLocalContentEntity('places', placeId)
+    resetOverview()
+    await refresh()
+  }
+
+  const deleteVisit = async (visitId: VisitId) => {
+    if (!import.meta.env.DEV) return
+    const { deleteLocalContentEntity } = await import('./data/localContentEditorApi')
+    await deleteLocalContentEntity('visits', visitId)
+    await refresh()
+  }
+
+  const deleteMemory = async (memoryId: MemoryId) => {
+    if (!import.meta.env.DEV) return
+    const { deleteLocalContentEntity } = await import('./data/localContentEditorApi')
+    await deleteLocalContentEntity('memories', memoryId)
+    await refresh()
+  }
 
   const globePlaces = useMemo<GlobePlace[]>(
     () => content.places.map((place) => ({
@@ -347,8 +392,10 @@ function WorldApp({ content }: { content: WorldContent }) {
                 imageryBrightness={imageryTuning.brightness}
                 imageryContrast={imageryTuning.contrast}
                 imagerySaturation={imageryTuning.saturation}
+                editEnabled={editEnabled}
                 onBrightnessChange={(value) => updateImageryTuning('brightness', value)}
                 onContrastChange={(value) => updateImageryTuning('contrast', value)}
+                onCreatePlace={() => setPlaceEditor({ mode: 'create' })}
                 onHoverCountryGroup={setHoveredCountryGroupId}
                 onResetImageryTuning={resetImageryTuning}
                 onSaturationChange={(value) => updateImageryTuning('saturation', value)}
@@ -369,6 +416,7 @@ function WorldApp({ content }: { content: WorldContent }) {
                   coverForPlace={(placeId) => content.coverByPlaceId[placeId]}
                   hiddenPhotoIds={selectedPlace ? content.hiddenMediaIdsByPlaceId[selectedPlace.id] ?? [] : []}
                   dateRangeForPlace={(placeId) => content.dateRangeByPlaceId[placeId] ?? ''}
+                  editEnabled={editEnabled}
                   onSelectPlace={selectPlace}
                   onOpenPhotos={setPlacePhotoGallery}
                   onOpenPlaceDetail={openPlaceDetail}
@@ -379,6 +427,18 @@ function WorldApp({ content }: { content: WorldContent }) {
           </div>
 
           <div className="atlas-map-controls">
+            {localEditorAvailable ? (
+              <button
+                type="button"
+                className="atlas-dock-button pointer-events-auto"
+                aria-pressed={editMode}
+                aria-label={editMode ? '退出编辑模式' : '进入编辑模式'}
+                title={editMode ? '退出编辑模式' : '编辑模式（仅本机生效）'}
+                onClick={() => setEditMode((current) => !current)}
+              >
+                <Pencil />
+              </button>
+            ) : null}
             <button
               type="button"
               className="atlas-dock-button pointer-events-auto"
@@ -445,8 +505,17 @@ function WorldApp({ content }: { content: WorldContent }) {
           photos={content.mediaByPlaceId[detailPlace.id] ?? []}
           cover={content.coverByPlaceId[detailPlace.id]}
           dateRangeLabel={content.dateRangeByPlaceId[detailPlace.id] ?? ''}
+          editEnabled={editEnabled}
           onClose={() => setPlaceDetailOpen(false)}
           onOpenPhotos={setPlacePhotoGallery}
+          onEditPlace={() => setPlaceEditor({ mode: 'edit', place: detailPlace })}
+          onDeletePlace={() => deletePlace(detailPlace.id)}
+          onCreateVisit={() => setVisitEditor({ mode: 'create', placeId: detailPlace.id })}
+          onEditVisit={(visit) => setVisitEditor({ mode: 'edit', visit })}
+          onDeleteVisit={(visit) => deleteVisit(visit.id)}
+          onCreateMemory={(visit) => setMemoryEditor({ mode: 'create', visitId: visit.id, placeId: detailPlace.id })}
+          onEditMemory={(memory) => setMemoryEditor({ mode: 'edit', memory, placeId: detailPlace.id })}
+          onDeleteMemory={(memory) => deleteMemory(memory.id)}
         />
       ) : null}
 
@@ -454,6 +523,35 @@ function WorldApp({ content }: { content: WorldContent }) {
         <PlacePhotoGalleryModal
           {...placePhotoGallery}
           onClose={() => setPlacePhotoGallery(undefined)}
+        />
+      ) : null}
+
+      {editEnabled && placeEditor ? (
+        <PlaceEditorSheet
+          worldId={content.world.id}
+          existing={placeEditor.mode === 'edit' ? placeEditor.place : undefined}
+          onClose={() => setPlaceEditor(undefined)}
+          onSaved={refresh}
+        />
+      ) : null}
+
+      {editEnabled && visitEditor ? (
+        <VisitEditorSheet
+          placeId={visitEditor.mode === 'edit' ? visitEditor.visit.placeId : visitEditor.placeId}
+          existing={visitEditor.mode === 'edit' ? visitEditor.visit : undefined}
+          onClose={() => setVisitEditor(undefined)}
+          onSaved={refresh}
+        />
+      ) : null}
+
+      {editEnabled && memoryEditor ? (
+        <MemoryEditorSheet
+          visitId={memoryEditor.mode === 'edit' ? memoryEditor.memory.visitId : memoryEditor.visitId}
+          placeId={memoryEditor.placeId}
+          media={content.mediaByPlaceId[memoryEditor.placeId] ?? []}
+          existing={memoryEditor.mode === 'edit' ? memoryEditor.memory : undefined}
+          onClose={() => setMemoryEditor(undefined)}
+          onSaved={refresh}
         />
       ) : null}
     </main>
@@ -486,7 +584,7 @@ function App() {
     )
   }
 
-  return <WorldApp content={state.content} />
+  return <WorldApp content={state.content} refresh={state.refresh} />
 }
 
 export default App

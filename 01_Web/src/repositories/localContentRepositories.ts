@@ -1,13 +1,12 @@
 // Local repository implementations (ARCHITECTURE.md §5).
-// Reads the tracked content files in 01_Web/content/. Runtime parsing is
-// defensive but intentionally lighter than scripts/validate-content.mjs,
-// which is the authoritative pre-build gate.
+// Reads the tracked content files in 01_Web/content/ through the shared raw
+// cache (localContentCache.ts) — in dev the cache can be refreshed after
+// local-editor saves. Runtime parsing is defensive but intentionally lighter
+// than scripts/validate-content.mjs, which is the authoritative pre-build
+// gate.
 
-import worldJson from '../../content/world.json'
-import placesJson from '../../content/places.json'
-import visitsJson from '../../content/visits.json'
-import memoriesJson from '../../content/memories.json'
 import { orderMemoriesChronologically, orderVisitsChronologically } from '../domain/viewModel'
+import { getRawContent } from './localContentCache'
 import type {
   Memory,
   Place,
@@ -150,36 +149,34 @@ const parseList = <T,>(value: unknown, parse: (item: unknown) => T, label: strin
 }
 
 export const createLocalWorldRepository = (): WorldRepository => ({
-  get: () => Promise.resolve(parseWorld(worldJson)),
+  get: () => Promise.resolve(parseWorld(getRawContent().world)),
 })
 
 export const createLocalPlaceRepository = (): PlaceRepository => {
-  const places = parseList(placesJson, parsePlace, 'places.json')
+  const listPlaces = () => parseList(getRawContent().places, parsePlace, 'places.json')
   return {
-    list: () => Promise.resolve(places),
-    getById: (id: PlaceId) => Promise.resolve(places.find((place) => place.id === id)),
+    list: () => Promise.resolve(listPlaces()),
+    getById: (id: PlaceId) => Promise.resolve(listPlaces().find((place) => place.id === id)),
   }
 }
 
 export const createLocalVisitRepository = (): VisitRepository => {
-  const visits = orderVisitsChronologically(parseList(visitsJson, parseVisit, 'visits.json'))
+  const listVisits = () => orderVisitsChronologically(parseList(getRawContent().visits, parseVisit, 'visits.json'))
   return {
-    list: () => Promise.resolve(visits),
+    list: () => Promise.resolve(listVisits()),
     listForPlace: (placeId: PlaceId) =>
-      Promise.resolve(visits.filter((visit) => visit.placeId === placeId)),
-    getById: (id: VisitId) => Promise.resolve(visits.find((visit) => visit.id === id)),
+      Promise.resolve(listVisits().filter((visit) => visit.placeId === placeId)),
+    getById: (id: VisitId) => Promise.resolve(listVisits().find((visit) => visit.id === id)),
   }
 }
 
-const orderMemories = orderMemoriesChronologically
-
 export const createLocalMemoryRepository = (): MemoryRepository => {
-  const memories = orderMemories(parseList(memoriesJson, parseMemory, 'memories.json'))
+  const listMemories = () => orderMemoriesChronologically(parseList(getRawContent().memories, parseMemory, 'memories.json'))
   return {
-    list: () => Promise.resolve(memories),
+    list: () => Promise.resolve(listMemories()),
     listForVisit: (visitId: VisitId) =>
-      Promise.resolve(memories.filter((memory) => memory.visitId === visitId)),
-    getById: (id: string) => Promise.resolve(memories.find((memory) => memory.id === id)),
+      Promise.resolve(listMemories().filter((memory) => memory.visitId === visitId)),
+    getById: (id: string) => Promise.resolve(listMemories().find((memory) => memory.id === id)),
   }
 }
 

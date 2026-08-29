@@ -12,6 +12,10 @@ export default defineConfig({
     watch: {
       ignored: [
         '**/public/media/user/**',
+        // The local editor writes content/*.json through the dev middleware;
+        // ignore those writes so Vite does not trigger a full-page reload
+        // (the app refreshes repositories explicitly after each save).
+        '**/content/**',
       ],
     },
   },

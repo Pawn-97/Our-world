@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import { CalendarDays, Compass, GripVertical, Layers3, Star, X } from 'lucide-react'
-import { localEditorAvailable, mediaEditorState } from '../data/editorState'
-import { importLocalMedia, reloadAfterLocalSave, updateLocalEditorState, uploadLocalMedia } from '../data/localEditorApi'
+import { mediaEditorState } from '../data/editorState'
+// NOTE: the dev-only editor API client (../data/localEditorApi) is loaded via
+// dynamic import inside import.meta.env.DEV guards, never statically — the
+// production bundle must not contain any editor endpoint strings.
 import type { CountryGroup } from '../domain/viewModel'
 import { placeStatusLabels } from '../domain/types'
 import type { Media, Place, PlaceId, SelectionMode } from '../domain/types'
@@ -23,6 +25,8 @@ type InfoCardProps = {
   /** Saved hidden photo ids for the selected place (editor restore flow). */
   hiddenPhotoIds: string[]
   dateRangeForPlace: (placeId: PlaceId) => string
+  /** Local editor (dev-only): shows the photo curation toolbar in edit mode. */
+  editEnabled?: boolean
   onSelectPlace?: (placeId: PlaceId) => void
   onOpenPhotos?: (request: PlacePhotoGalleryRequest) => void
   onOpenPlaceDetail?: () => void
@@ -40,6 +44,7 @@ export function InfoCard({
   coverForPlace,
   hiddenPhotoIds,
   dateRangeForPlace,
+  editEnabled = false,
   onSelectPlace,
   onOpenPhotos,
   onOpenPlaceDetail,
@@ -69,10 +74,15 @@ export function InfoCard({
   const hiddenPhotoIdsForPlace = draftHiddenPhotoIds.filter((id) => knownPhotoIdsForPlace.has(id))
 
   const savePhotoDraft = async () => {
+    // Keep the DEV guard as its own statement: `a || !import.meta.env.DEV`
+    // compounds do not tree-shake, and the dynamic import below must vanish
+    // from the production bundle entirely.
+    if (!import.meta.env.DEV) return
     if (!place) return
     setEditorBusy(true)
     setEditorNotice('正在保存照片布局…')
     try {
+      const { updateLocalEditorState, reloadAfterLocalSave } = await import('../data/localEditorApi')
       await updateLocalEditorState((current) => ({
         ...current,
         mediaOrderByPlace: { ...current.mediaOrderByPlace, [place.id]: draftPhotoIds },
@@ -89,10 +99,12 @@ export function InfoCard({
   }
 
   const uploadPhotos = async (files: FileList | null) => {
+    if (!import.meta.env.DEV) return
     if (!files?.length || !place) return
     setEditorBusy(true)
     setEditorNotice(`正在接收 ${files.length} 张照片…`)
     try {
+      const { importLocalMedia, reloadAfterLocalSave, uploadLocalMedia } = await import('../data/localEditorApi')
       const uploadedSourcePaths: string[] = []
       for (const file of Array.from(files)) {
         const uploaded = await uploadLocalMedia({ placeId: place.id, kind: 'photo', file })
@@ -242,7 +254,7 @@ export function InfoCard({
         {isOverview ? <p className="text-sm leading-6 text-slate-600">{summary}</p> : null}
 
         {(isCountryGrid || isPlaceMode) && (
-          (isPlaceMode ? photos.length > 0 : groupPlaces.length > 0) || localEditorAvailable
+          (isPlaceMode ? photos.length > 0 : groupPlaces.length > 0) || editEnabled
         ) ? (
           <div
             className={`atlas-memory-panel flex min-h-0 flex-col rounded-[22px] bg-slate-950 p-3 text-white shadow-[0_18px_50px_rgba(15,23,42,0.2)] ${
@@ -275,7 +287,7 @@ export function InfoCard({
                   </p>
                 </div>
               )}
-              {isPlaceMode && localEditorAvailable ? (
+              {isPlaceMode && editEnabled ? (
                 <LocalEditorToolbar
                   editing={photoEditing}
                   busy={editorBusy}
@@ -318,14 +330,18 @@ export function InfoCard({
                 disabled={editorBusy}
                 onClick={(event) => {
                   event.stopPropagation()
+                  if (!import.meta.env.DEV) return
                   setEditorBusy(true)
-                  void updateLocalEditorState((current) => ({
-                    ...current,
-                    hiddenMediaIds: current.hiddenMediaIds.filter((id) => !hiddenPhotoIdsForPlace.includes(id)),
-                  })).then(reloadAfterLocalSave).catch((error: unknown) => {
-                    setEditorNotice(error instanceof Error ? error.message : '恢复失败。')
-                    setEditorBusy(false)
-                  })
+                  void import('../data/localEditorApi')
+                    .then(({ updateLocalEditorState, reloadAfterLocalSave }) =>
+                      updateLocalEditorState((current) => ({
+                        ...current,
+                        hiddenMediaIds: current.hiddenMediaIds.filter((id) => !hiddenPhotoIdsForPlace.includes(id)),
+                      })).then(reloadAfterLocalSave))
+                    .catch((error: unknown) => {
+                      setEditorNotice(error instanceof Error ? error.message : '恢复失败。')
+                      setEditorBusy(false)
+                    })
                 }}
               >
                 恢复本地点已隐藏照片（{hiddenPhotoIdsForPlace.length}）

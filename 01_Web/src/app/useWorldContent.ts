@@ -3,7 +3,7 @@
 // media galleries and covers). Components receive plain props from here and
 // never import content data or data modules themselves.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   deriveCountryGroups,
   deriveRoutes,
@@ -33,6 +33,7 @@ import {
   visitRepository,
   worldRepository,
 } from '../repositories'
+import { refreshLocalContentCache } from '../repositories/localContentCache'
 
 export type WorldContent = {
   world: World
@@ -60,7 +61,7 @@ export type WorldContent = {
 export type WorldContentState =
   | { status: 'loading' }
   | { status: 'error'; error: string }
-  | { status: 'ready'; content: WorldContent }
+  | { status: 'ready'; content: WorldContent; refresh: () => Promise<void> }
 
 const indexBy = <T,>(items: T[], keyOf: (item: T) => string): Record<string, T> =>
   Object.fromEntries(items.map((item) => [keyOf(item), item]))
@@ -142,12 +143,21 @@ const loadWorldContent = async (): Promise<WorldContent> => {
 
 export const useWorldContent = (): WorldContentState => {
   const [state, setState] = useState<WorldContentState>({ status: 'loading' })
+  const [version, setVersion] = useState(0)
+
+  // Preview semantics (Milestone 5): after a local-editor save, refresh
+  // re-reads content from disk (dev middleware) and rebuilds the view model
+  // in place — no manual page reload. In production it is a no-op rebuild.
+  const refresh = useCallback(async () => {
+    await refreshLocalContentCache()
+    setVersion((current) => current + 1)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     loadWorldContent()
       .then((content) => {
-        if (!cancelled) setState({ status: 'ready', content })
+        if (!cancelled) setState({ status: 'ready', content, refresh })
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -159,7 +169,7 @@ export const useWorldContent = (): WorldContentState => {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refresh, version])
 
   return state
 }

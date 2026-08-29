@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, MapPin, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, MapPin, Plus, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import type { CountryGroup } from '../domain/viewModel'
 import { placeStatusLabels } from '../domain/types'
 import type { CountryGroupId, PlaceId, PlaceStatus } from '../domain/types'
@@ -25,11 +25,14 @@ type CountrySelectorProps = {
    * selects and flies. Desktop behavior is unchanged.
    */
   countryExpandOnly?: boolean
+  /** Local editor (dev-only): shows the "新增地点" entry when edit mode is on. */
+  editEnabled?: boolean
   imageryBrightness: number
   imageryContrast: number
   imagerySaturation: number
   onBrightnessChange: (value: number) => void
   onContrastChange: (value: number) => void
+  onCreatePlace?: () => void
   onHoverCountryGroup: (countryGroupId?: CountryGroupId) => void
   onResetImageryTuning: () => void
   onSaturationChange: (value: number) => void
@@ -65,11 +68,13 @@ export function CountrySelector({
   selectedPlaceId,
   globeDistance,
   countryExpandOnly = false,
+  editEnabled = false,
   imageryBrightness,
   imageryContrast,
   imagerySaturation,
   onBrightnessChange,
   onContrastChange,
+  onCreatePlace,
   onHoverCountryGroup,
   onResetImageryTuning,
   onSaturationChange,
@@ -161,6 +166,17 @@ export function CountrySelector({
           )
         })}
       </div>
+
+      {editEnabled && onCreatePlace ? (
+        <button
+          type="button"
+          onClick={onCreatePlace}
+          className="atlas-panel-body mb-3 flex h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full border border-dashed border-slate-400/80 bg-white/55 text-xs font-semibold text-slate-600 transition hover:bg-white/85 hover:text-slate-950"
+        >
+          <Plus className="size-4" />
+          新增地点
+        </button>
+      ) : null}
 
       <div className="atlas-country-list atlas-panel-body selector-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
         {visibleGroups.length === 0 ? (

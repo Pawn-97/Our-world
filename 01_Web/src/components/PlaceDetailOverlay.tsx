@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Clock3, Image as ImageIcon, ImagePlus, Loader2, MapPin, NotebookPen, X } from 'lucide-react'
-import { localEditorAvailable } from '../data/editorState'
-import { importLocalMedia, reloadAfterLocalSave, uploadLocalMedia } from '../data/localEditorApi'
+import { ArrowLeft, Clock3, Image as ImageIcon, ImagePlus, Loader2, MapPin, NotebookPen, Pencil, Plus, X } from 'lucide-react'
+// NOTE: the dev-only editor API clients (../data/localEditorApi and
+// ../data/localContentEditorApi) are loaded via dynamic import inside
+// import.meta.env.DEV guards, never statically — the production bundle must
+// not contain any editor endpoint strings.
 import type { CountryGroup } from '../domain/viewModel'
 import { collectMemoryMedia, getVisitStatus, isCompletedVisit, orderMemoriesChronologically, selectVisits } from '../domain/viewModel'
 import { memoryTypeLabels, placeStatusLabels } from '../domain/types'
@@ -9,6 +11,7 @@ import type { Media, MediaId, Memory, MemoryId, Place, Visit, VisitId } from '..
 import { mediaService } from '../services/mediaService'
 import { statusDotStyle } from './placeStatusStyle'
 import { overlayEscapeStack } from './overlayEscapeStack'
+import { ConfirmDeleteButton } from './editor/ConfirmDeleteButton'
 import type { PlacePhotoGalleryRequest } from './PlacePhotoGalleryModal'
 
 type PlaceDetailOverlayProps = {
@@ -21,8 +24,19 @@ type PlaceDetailOverlayProps = {
   photos: Media[]
   cover?: Media
   dateRangeLabel: string
+  /** Local editor (dev-only): shows place/visit/memory edit entries. */
+  editEnabled?: boolean
   onClose: () => void
   onOpenPhotos: (request: PlacePhotoGalleryRequest) => void
+  onEditPlace?: () => void
+  /** Delete callbacks must not throw; the overlay surfaces errors inline. */
+  onDeletePlace?: () => Promise<void>
+  onCreateVisit?: () => void
+  onEditVisit?: (visit: Visit) => void
+  onDeleteVisit?: (visit: Visit) => Promise<void>
+  onCreateMemory?: (visit: Visit) => void
+  onEditMemory?: (memory: Memory) => void
+  onDeleteMemory?: (memory: Memory) => Promise<void>
 }
 
 type AddMediaState =
@@ -65,13 +79,24 @@ export function PlaceDetailOverlay({
   photos,
   cover,
   dateRangeLabel,
+  editEnabled = false,
   onClose,
   onOpenPhotos,
+  onEditPlace,
+  onDeletePlace,
+  onCreateVisit,
+  onEditVisit,
+  onDeleteVisit,
+  onCreateMemory,
+  onEditMemory,
+  onDeleteMemory,
 }: PlaceDetailOverlayProps) {
   const accent = group?.accent ?? '#38bdf8'
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [addMediaState, setAddMediaState] = useState<AddMediaState>({ phase: 'idle' })
   const addMediaBusy = addMediaState.phase === 'uploading' || addMediaState.phase === 'importing'
+  // Delete errors from the local editor surface inline above the photo grid.
+  const [deleteError, setDeleteError] = useState('')
   // Visit selection: 'all' shows every visit's memories; picking one visit
   // narrows the memory list to that trip.
   const [selectedVisitId, setSelectedVisitId] = useState<VisitId | 'all'>('all')
@@ -132,9 +157,13 @@ export function PlaceDetailOverlay({
 
   // One-step add media (dev/local editor only): pick → upload → import → reload.
   const addMedia = async (files: FileList | null) => {
+    // Keep the DEV guard as its own statement so the dynamic import below is
+    // tree-shaken out of the production bundle (compound conditions are not).
+    if (!import.meta.env.DEV) return
     if (!files?.length) return
     const fileList = Array.from(files)
     try {
+      const { importLocalMedia, reloadAfterLocalSave, uploadLocalMedia } = await import('../data/localEditorApi')
       const uploadedSourcePaths: string[] = []
       for (const [index, file] of fileList.entries()) {
         setAddMediaState({ phase: 'uploading', done: index, total: fileList.length })
@@ -155,6 +184,19 @@ export function PlaceDetailOverlay({
       })
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  // Wrap editor deletes so failures surface inline instead of throwing
+  // through ConfirmDeleteButton; `after` cleans up local selection state.
+  const runDelete = async (action: (() => Promise<void>) | undefined, after?: () => void) => {
+    if (!action) return
+    setDeleteError('')
+    try {
+      await action()
+      after?.()
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : '删除失败。')
     }
   }
 
@@ -240,11 +282,52 @@ export function PlaceDetailOverlay({
           </section>
         ) : null}
 
-        {visits.length > 0 ? (
+        {editEnabled ? (
+          <section
+            aria-label="地点编辑"
+            className="mt-8 flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-amber-300/30 bg-amber-300/[0.05] p-3"
+          >
+            <span className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200/70">
+              编辑模式
+            </span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              onClick={onEditPlace}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/16 bg-white/8 px-4 text-xs font-semibold text-slate-200 transition hover:bg-white/14 active:scale-95"
+            >
+              <Pencil className="size-3.5" />
+              编辑地点
+            </button>
+            <ConfirmDeleteButton
+              label="删除地点"
+              onConfirm={() => runDelete(onDeletePlace)}
+            />
+          </section>
+        ) : null}
+
+        {visits.length > 0 || editEnabled ? (
           <section className="mt-10">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-              {hasCompletedVisits ? '到访 · Visits' : '计划 · Plans'}
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                {hasCompletedVisits ? '到访 · Visits' : '计划 · Plans'}
+              </h2>
+              {editEnabled ? (
+                <button
+                  type="button"
+                  onClick={onCreateVisit}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/16 bg-white/8 px-3.5 text-xs font-semibold text-slate-200 transition hover:bg-white/14 active:scale-95"
+                >
+                  <Plus className="size-3.5" />
+                  新增到访
+                </button>
+              ) : null}
+            </div>
+            {visits.length === 0 ? (
+              <div className="mt-4 rounded-3xl border border-dashed border-white/14 bg-white/[0.04] p-5 text-sm leading-6 text-slate-400">
+                还没有到访记录。点击右上角「新增到访」创建第一条。
+              </div>
+            ) : null}
             {visits.length > 1 ? (
               <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="选择到访">
                 <button
@@ -308,6 +391,36 @@ export function PlaceDetailOverlay({
                     {visit.summary ? (
                       <p className="mt-1.5 text-sm leading-6 text-slate-400">{visit.summary}</p>
                     ) : null}
+                    {editEnabled ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onEditVisit?.(visit)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/16 bg-white/8 px-3 text-[11px] font-semibold text-slate-300 transition hover:bg-white/14 active:scale-95"
+                        >
+                          <Pencil className="size-3" />
+                          编辑到访
+                        </button>
+                        <ConfirmDeleteButton
+                          compact
+                          label="删除到访"
+                          onConfirm={() => runDelete(
+                            onDeleteVisit ? () => onDeleteVisit(visit) : undefined,
+                            () => {
+                              if (selectedVisitId === visit.id) setSelectedVisitId('all')
+                            },
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onCreateMemory?.(visit)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/16 bg-white/8 px-3 text-[11px] font-semibold text-slate-300 transition hover:bg-white/14 active:scale-95"
+                        >
+                          <Plus className="size-3" />
+                          新增记忆
+                        </button>
+                      </div>
+                    ) : null}
                     {visitMemories.length > 0 ? (
                       <ol className="relative mt-5 space-y-5 border-l border-white/12 pl-5">
                         {orderMemoriesChronologically(visitMemories).map((memory) => {
@@ -360,6 +473,28 @@ export function PlaceDetailOverlay({
                                   </span>
                                 ) : null}
                               </button>
+                              {editEnabled ? (
+                                <span className="mt-1 flex items-center gap-2 px-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => onEditMemory?.(memory)}
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/16 bg-white/8 px-3 text-[11px] font-semibold text-slate-300 transition hover:bg-white/14 active:scale-95"
+                                  >
+                                    <Pencil className="size-3" />
+                                    编辑
+                                  </button>
+                                  <ConfirmDeleteButton
+                                    compact
+                                    label="删除"
+                                    onConfirm={() => runDelete(
+                                      onDeleteMemory ? () => onDeleteMemory(memory) : undefined,
+                                      () => {
+                                        if (selectedMemoryId === memory.id) setSelectedMemoryId(undefined)
+                                      },
+                                    )}
+                                  />
+                                </span>
+                              ) : null}
                             </li>
                           )
                         })}
@@ -385,7 +520,7 @@ export function PlaceDetailOverlay({
           <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
             照片 · Photos
           </h2>
-          {localEditorAvailable ? (
+          {editEnabled ? (
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -408,9 +543,15 @@ export function PlaceDetailOverlay({
           ) : null}
         </div>
 
-        {localEditorAvailable ? (
+        {editEnabled ? (
           <p className="mt-2 text-[11px] leading-5 text-slate-500">
-            网页上传目前仅支持 JPG / PNG / WebP / AVIF 图片；视频请直接放入 MediaInbox 后运行 media:import。文本记忆请在 content/memories.json 中维护。
+            网页上传目前仅支持 JPG / PNG / WebP / AVIF 图片；视频请直接放入 MediaInbox 后运行 media:import。
+          </p>
+        ) : null}
+
+        {deleteError ? (
+          <p role="alert" className="mt-3 whitespace-pre-line text-xs font-medium text-rose-300">
+            {deleteError}
           </p>
         ) : null}
 
@@ -457,7 +598,7 @@ export function PlaceDetailOverlay({
           </div>
         ) : (
           <div className="mt-5 rounded-2xl border border-dashed border-white/14 bg-white/[0.04] px-5 py-10 text-center text-sm text-slate-400">
-            还没有照片。{localEditorAvailable ? '点击右上角「添加照片」即可从本机导入。' : '照片导入后会显示在这里。'}
+            还没有照片。{editEnabled ? '点击右上角「添加照片」即可从本机导入。' : '照片导入后会显示在这里。'}
           </div>
         )}
       </div>

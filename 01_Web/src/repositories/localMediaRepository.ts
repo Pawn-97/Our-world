@@ -1,12 +1,13 @@
 // Local media repository (ARCHITECTURE.md §6).
-// Merges tracked content/media.json with the gitignored generated import
-// catalog (src/data/generated/user-media.local.json, written by
+// Merges tracked content/media.json (via the shared raw cache, refreshable in
+// dev) with the gitignored generated import catalog
+// (src/data/generated/user-media.local.json, written by
 // scripts/import-media.mjs), then applies local media-curation state
 // (order / hide / cover). Components never read either file directly.
 
-import mediaJson from '../../content/media.json'
 import { mediaEditorState, orderBySavedIds } from '../data/editorState'
 import type { Media, Place, PlaceId } from '../domain/types'
+import { getRawContent } from './localContentCache'
 import type { MediaRepository } from './types'
 
 export type ImportedMediaKind = 'photo' | 'panorama360' | 'aerialPhoto' | 'video'
@@ -142,24 +143,28 @@ const pipelineCoverByPlace = galleryCatalogItems.reduce<Record<PlaceId, string |
 )
 
 export const createLocalMediaRepository = (): MediaRepository => {
-  const allMedia = [...parseContentMedia(mediaJson), ...galleryCatalogItems.map(mapCatalogItemToMedia)]
-  const visibleMedia = allMedia.filter((item) => !mediaEditorState.hiddenMediaIds.includes(item.id))
-  const mediaById = new Map(visibleMedia.map((item) => [item.id, item]))
+  // Recomputed per call: the raw cache can refresh after dev content saves.
+  const currentMedia = () => {
+    const allMedia = [...parseContentMedia(getRawContent().media), ...galleryCatalogItems.map(mapCatalogItemToMedia)]
+    const visibleMedia = allMedia.filter((item) => !mediaEditorState.hiddenMediaIds.includes(item.id))
+    return { allMedia, visibleMedia, mediaById: new Map(visibleMedia.map((item) => [item.id, item])) }
+  }
 
   return {
-    list: () => Promise.resolve(visibleMedia),
+    list: () => Promise.resolve(currentMedia().visibleMedia),
     listForPlace: (placeId: PlaceId) =>
       Promise.resolve(orderBySavedIds(
-        visibleMedia.filter((item) => item.placeId === placeId),
+        currentMedia().visibleMedia.filter((item) => item.placeId === placeId),
         mediaEditorState.mediaOrderByPlace[placeId],
       )),
     listHiddenIdsForPlace: (placeId: PlaceId) =>
       Promise.resolve(
-        allMedia
+        currentMedia().allMedia
           .filter((item) => item.placeId === placeId && mediaEditorState.hiddenMediaIds.includes(item.id))
           .map((item) => item.id),
       ),
     getCoverForPlace: (place: Place) => {
+      const { visibleMedia, mediaById } = currentMedia()
       const candidates = [
         mediaEditorState.coverMediaByPlace[place.id],
         place.coverMediaId,
