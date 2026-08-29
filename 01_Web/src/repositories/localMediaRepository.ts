@@ -4,8 +4,14 @@
 // (src/data/generated/user-media.local.json, written by
 // scripts/import-media.mjs), then applies local media-curation state
 // (order / hide / cover). Components never read either file directly.
+//
+// Both the catalog and the curation state are mutable caches: in dev they are
+// primed from disk through the middleware on page load and refreshed in place
+// after local-editor saves (no reload); production always uses the bundled
+// snapshot. The middleware read is loaded lazily inside a DEV guard so the
+// production bundle contains no editor endpoints.
 
-import { mediaEditorState, orderBySavedIds } from '../data/editorState'
+import { getMediaEditorState, orderBySavedIds, setMediaEditorState } from '../data/editorState'
 import type { Media, Place, PlaceId } from '../domain/types'
 import { getRawContent } from './localContentCache'
 import type { MediaRepository } from './types'
@@ -120,33 +126,63 @@ export const mapCatalogItemToMedia = (item: ImportedMediaCatalogItem): Media => 
   createdAt: item.date ?? '',
 })
 
-const allCatalogItems = Object.values(localCatalogModules)
-  .filter(isCatalog)
-  .flatMap((catalog) => catalog.items)
-  .filter(isCatalogItem)
+const deriveCatalogViews = (catalogItems: ImportedMediaCatalogItem[]) => {
+  /**
+   * Gallery items: ready photos from the import pipeline. Drone panoramas and
+   * aerial media stay in the catalog but out of place galleries until a
+   * dedicated presentation exists (Milestone 4).
+   */
+  const galleryItems = catalogItems.filter(
+    (item) => item.kind === 'photo' && item.status === 'ready',
+  )
+  const coverByPlace = galleryItems.reduce<Record<PlaceId, string | undefined>>(
+    (covers, item) => {
+      if (item.isCover && !covers[item.placeId]) covers[item.placeId] = item.id
+      return covers
+    },
+    {},
+  )
+  return { galleryItems, coverByPlace }
+}
+
+let catalogViews = deriveCatalogViews(
+  Object.values(localCatalogModules)
+    .filter(isCatalog)
+    .flatMap((catalog) => catalog.items)
+    .filter(isCatalogItem),
+)
+
+/** Dev-only read-back of the import catalog + curation state; throws on failure. */
+export const refreshLocalMediaCache = async (): Promise<void> => {
+  if (!import.meta.env.DEV) return
+  const { readLocalEditorState, readLocalMediaCatalog } = await import('../data/localEditorApi')
+  const [catalog, state] = await Promise.all([readLocalMediaCatalog(), readLocalEditorState()])
+  const items = isCatalog(catalog) ? catalog.items.filter(isCatalogItem) : []
+  catalogViews = deriveCatalogViews(items)
+  setMediaEditorState(state)
+}
 
 /**
- * Gallery items: ready photos from the import pipeline. Drone panoramas and
- * aerial media stay in the catalog but out of place galleries until a
- * dedicated presentation exists (Milestone 4).
+ * Dev-only initial prime: prefer the on-disk catalog/state over the bundled
+ * snapshot so imports made outside the running dev server are visible without
+ * a restart. Silently keeps the bundled snapshot when the read fails.
  */
-const galleryCatalogItems = allCatalogItems.filter(
-  (item) => item.kind === 'photo' && item.status === 'ready',
-)
-
-const pipelineCoverByPlace = galleryCatalogItems.reduce<Record<PlaceId, string | undefined>>(
-  (covers, item) => {
-    if (item.isCover && !covers[item.placeId]) covers[item.placeId] = item.id
-    return covers
-  },
-  {},
-)
+export const primeLocalMediaCache = async (): Promise<void> => {
+  if (!import.meta.env.DEV) return
+  try {
+    await refreshLocalMediaCache()
+  } catch {
+    // Bundled catalog/state is the documented dev fallback.
+  }
+}
 
 export const createLocalMediaRepository = (): MediaRepository => {
-  // Recomputed per call: the raw cache can refresh after dev content saves.
+  // Recomputed per call: the raw cache and catalog/state caches can refresh
+  // after dev saves.
   const currentMedia = () => {
-    const allMedia = [...parseContentMedia(getRawContent().media), ...galleryCatalogItems.map(mapCatalogItemToMedia)]
-    const visibleMedia = allMedia.filter((item) => !mediaEditorState.hiddenMediaIds.includes(item.id))
+    const editorState = getMediaEditorState()
+    const allMedia = [...parseContentMedia(getRawContent().media), ...catalogViews.galleryItems.map(mapCatalogItemToMedia)]
+    const visibleMedia = allMedia.filter((item) => !editorState.hiddenMediaIds.includes(item.id))
     return { allMedia, visibleMedia, mediaById: new Map(visibleMedia.map((item) => [item.id, item])) }
   }
 
@@ -155,20 +191,20 @@ export const createLocalMediaRepository = (): MediaRepository => {
     listForPlace: (placeId: PlaceId) =>
       Promise.resolve(orderBySavedIds(
         currentMedia().visibleMedia.filter((item) => item.placeId === placeId),
-        mediaEditorState.mediaOrderByPlace[placeId],
+        getMediaEditorState().mediaOrderByPlace[placeId],
       )),
     listHiddenIdsForPlace: (placeId: PlaceId) =>
       Promise.resolve(
         currentMedia().allMedia
-          .filter((item) => item.placeId === placeId && mediaEditorState.hiddenMediaIds.includes(item.id))
+          .filter((item) => item.placeId === placeId && getMediaEditorState().hiddenMediaIds.includes(item.id))
           .map((item) => item.id),
       ),
     getCoverForPlace: (place: Place) => {
       const { visibleMedia, mediaById } = currentMedia()
       const candidates = [
-        mediaEditorState.coverMediaByPlace[place.id],
+        getMediaEditorState().coverMediaByPlace[place.id],
         place.coverMediaId,
-        pipelineCoverByPlace[place.id],
+        catalogViews.coverByPlace[place.id],
       ]
       for (const candidateId of candidates) {
         const media = candidateId ? mediaById.get(candidateId) : undefined

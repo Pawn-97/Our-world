@@ -37,6 +37,8 @@ type PlaceDetailOverlayProps = {
   onCreateMemory?: (visit: Visit) => void
   onEditMemory?: (memory: Memory) => void
   onDeleteMemory?: (memory: Memory) => Promise<void>
+  /** In-place refresh after media imports (dev-only; no page reload). */
+  onMediaSaved?: () => Promise<void>
 }
 
 type AddMediaState =
@@ -90,6 +92,7 @@ export function PlaceDetailOverlay({
   onCreateMemory,
   onEditMemory,
   onDeleteMemory,
+  onMediaSaved,
 }: PlaceDetailOverlayProps) {
   const accent = group?.accent ?? '#38bdf8'
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -155,7 +158,8 @@ export function PlaceDetailOverlay({
 
   useEffect(() => overlayEscapeStack.register(() => escapeHandlerRef.current()), [])
 
-  // One-step add media (dev/local editor only): pick → upload → import → reload.
+  // One-step add media (dev/local editor only): pick → upload → import →
+  // in-place refresh (no page reload).
   const addMedia = async (files: FileList | null) => {
     // Keep the DEV guard as its own statement so the dynamic import below is
     // tree-shaken out of the production bundle (compound conditions are not).
@@ -163,7 +167,7 @@ export function PlaceDetailOverlay({
     if (!files?.length) return
     const fileList = Array.from(files)
     try {
-      const { importLocalMedia, reloadAfterLocalSave, uploadLocalMedia } = await import('../data/localEditorApi')
+      const { importLocalMedia, uploadLocalMedia } = await import('../data/localEditorApi')
       const uploadedSourcePaths: string[] = []
       for (const [index, file] of fileList.entries()) {
         setAddMediaState({ phase: 'uploading', done: index, total: fileList.length })
@@ -176,7 +180,8 @@ export function PlaceDetailOverlay({
       }
       setAddMediaState({ phase: 'importing' })
       await importLocalMedia(uploadedSourcePaths)
-      reloadAfterLocalSave()
+      await onMediaSaved?.()
+      setAddMediaState({ phase: 'idle' })
     } catch (error) {
       setAddMediaState({
         phase: 'error',

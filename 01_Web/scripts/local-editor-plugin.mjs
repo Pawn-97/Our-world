@@ -459,6 +459,14 @@ export function travelAtlasLocalEditor() {
             return sendJson(response, 200, { ok: true, content })
           }
 
+          // Import catalog read-back for in-place media refresh after imports
+          // (loopback only; the media files themselves stay static in public/).
+          if (request.method === 'GET' && url.pathname === '/__travelatlas/editor/media') {
+            if (!isLoopbackRequest(request)) return sendJson(response, 403, { ok: false, error: '仅允许本机编辑会话读取。' })
+            const catalog = await readJson(mediaCatalogPath, { schemaVersion: 3, items: [] })
+            return sendJson(response, 200, { ok: true, catalog })
+          }
+
           if (!authorizeWrite(request)) return sendJson(response, 403, { ok: false, error: '仅允许本机编辑会话写入。' })
 
           const contentEntityMatch = url.pathname.match(/^\/__travelatlas\/editor\/content\/(places|visits|memories)$/)

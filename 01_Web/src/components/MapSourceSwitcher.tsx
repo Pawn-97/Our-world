@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Layers3 } from 'lucide-react'
 import { mapSourceOptions } from '../data/mapSources'
 import type { MapSourceId } from '../data/mapSources'
+import { overlayEscapeStack } from './overlayEscapeStack'
 
 type MapSourceSwitcherProps = {
   value: MapSourceId
@@ -18,15 +19,14 @@ export function MapSourceSwitcher({ value, onChange }: MapSourceSwitcherProps) {
     const closeOnPointerDown = (event: PointerEvent) => {
       if (!shellRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
 
     document.addEventListener('pointerdown', closeOnPointerDown)
-    document.addEventListener('keydown', closeOnEscape)
+    // Escape goes through the shared stack: only the topmost layer closes per
+    // keypress, so an overlay above this menu gets Escape first.
+    const unregisterEscape = overlayEscapeStack.register(() => setOpen(false))
     return () => {
       document.removeEventListener('pointerdown', closeOnPointerDown)
-      document.removeEventListener('keydown', closeOnEscape)
+      unregisterEscape()
     }
   }, [open])
 

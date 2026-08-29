@@ -3,7 +3,7 @@
 // media galleries and covers). Components receive plain props from here and
 // never import content data or data modules themselves.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   deriveCountryGroups,
   deriveRoutes,
@@ -33,7 +33,8 @@ import {
   visitRepository,
   worldRepository,
 } from '../repositories'
-import { refreshLocalContentCache } from '../repositories/localContentCache'
+import { primeLocalContentCache, refreshLocalContentCache } from '../repositories/localContentCache'
+import { primeLocalMediaCache, refreshLocalMediaCache } from '../repositories/localMediaRepository'
 
 export type WorldContent = {
   world: World
@@ -144,18 +145,29 @@ const loadWorldContent = async (): Promise<WorldContent> => {
 export const useWorldContent = (): WorldContentState => {
   const [state, setState] = useState<WorldContentState>({ status: 'loading' })
   const [version, setVersion] = useState(0)
+  // The dev middleware prime (disk read-back) runs once per page load; later
+  // rebuilds triggered by refresh() already carry fresh caches.
+  const primedRef = useRef(false)
 
   // Preview semantics (Milestone 5): after a local-editor save, refresh
-  // re-reads content from disk (dev middleware) and rebuilds the view model
-  // in place — no manual page reload. In production it is a no-op rebuild.
+  // re-reads content AND the media catalog/curation state from disk (dev
+  // middleware) and rebuilds the view model in place — no page reload.
+  // In production it is a no-op rebuild.
   const refresh = useCallback(async () => {
-    await refreshLocalContentCache()
+    await Promise.all([refreshLocalContentCache(), refreshLocalMediaCache()])
     setVersion((current) => current + 1)
   }, [])
 
   useEffect(() => {
     let cancelled = false
-    loadWorldContent()
+    const load = async () => {
+      if (!primedRef.current) {
+        primedRef.current = true
+        await Promise.all([primeLocalContentCache(), primeLocalMediaCache()])
+      }
+      return loadWorldContent()
+    }
+    load()
       .then((content) => {
         if (!cancelled) setState({ status: 'ready', content, refresh })
       })

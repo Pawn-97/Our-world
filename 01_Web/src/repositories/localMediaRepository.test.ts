@@ -1,0 +1,88 @@
+// Tests for the in-place media refresh (tech-debt cleanup): after a local
+// import, the repository must reflect the on-disk import catalog and curation
+// state without a page reload.
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getMediaEditorState } from '../data/editorState'
+import {
+  createLocalMediaRepository,
+  primeLocalMediaCache,
+  refreshLocalMediaCache,
+} from './localMediaRepository'
+
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+
+const catalogItem = {
+  id: 'media-imported-test-1',
+  kind: 'photo',
+  placeId: 'place-tokyo',
+  placeName: 'Tokyo',
+  src: '/media/user/test/photo.jpg',
+  originalFileName: 'photo.jpg',
+  isCover: false,
+  status: 'ready',
+}
+
+const stubMediaEndpoints = () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/__travelatlas/editor/media')) {
+      return jsonResponse({ ok: true, catalog: { schemaVersion: 3, items: [catalogItem] } })
+    }
+    if (url.includes('/__travelatlas/editor/state')) {
+      return jsonResponse({
+        ok: true,
+        state: {
+          schemaVersion: 1,
+          mediaOrderByPlace: {},
+          hiddenMediaIds: ['media-tokyo-sakura-ueno-park'],
+          coverMediaByPlace: { 'place-tokyo': 'media-imported-test-1' },
+        },
+      })
+    }
+    throw new Error(`unexpected fetch: ${url}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('localMediaRepository (dev in-place refresh)', () => {
+  it('refreshLocalMediaCache swaps in the on-disk catalog and curation state', async () => {
+    stubMediaEndpoints()
+
+    await refreshLocalMediaCache()
+
+    const repository = createLocalMediaRepository()
+    const tokyoMedia = await repository.listForPlace('place-tokyo')
+    // Newly imported catalog item is visible without a reload.
+    expect(tokyoMedia.map((item) => item.id)).toContain('media-imported-test-1')
+    // Curation state hid one bundled item and chose the new cover.
+    expect(tokyoMedia.map((item) => item.id)).not.toContain('media-tokyo-sakura-ueno-park')
+    expect(getMediaEditorState().hiddenMediaIds).toEqual(['media-tokyo-sakura-ueno-park'])
+    const cover = await repository.getCoverForPlace({ id: 'place-tokyo' } as Parameters<typeof repository.getCoverForPlace>[0])
+    expect(cover?.id).toBe('media-imported-test-1')
+    const hidden = await repository.listHiddenIdsForPlace('place-tokyo')
+    expect(hidden).toContain('media-tokyo-sakura-ueno-park')
+  })
+
+  it('primeLocalMediaCache keeps the current caches when the middleware is unreachable', async () => {
+    const stateBefore = getMediaEditorState()
+    const repository = createLocalMediaRepository()
+    const mediaBefore = await repository.listForPlace('place-tokyo')
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('connection refused')
+    }))
+
+    await expect(primeLocalMediaCache()).resolves.toBeUndefined()
+    expect(getMediaEditorState()).toBe(stateBefore)
+    expect(await createLocalMediaRepository().listForPlace('place-tokyo')).toEqual(mediaBefore)
+  })
+})

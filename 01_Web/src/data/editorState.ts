@@ -53,9 +53,18 @@ const parseEditorState = (value: unknown): MediaEditorState | undefined => {
   }
 }
 
-export const mediaEditorState = Object.values(localEditorStateModules)
+// Mutable holder (tech-debt cleanup): in dev the curation state refreshes in
+// place after local-editor saves (no page reload), so readers must go through
+// getMediaEditorState() rather than capturing a snapshot at import time.
+let currentEditorState: MediaEditorState = Object.values(localEditorStateModules)
   .map(parseEditorState)
   .find(Boolean) ?? emptyEditorState
+
+export const getMediaEditorState = (): MediaEditorState => currentEditorState
+
+export const setMediaEditorState = (state: MediaEditorState): void => {
+  currentEditorState = state
+}
 
 export const orderBySavedIds = <T extends { id: string }>(items: T[], savedOrder?: string[]) => {
   if (!savedOrder?.length) return items

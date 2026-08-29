@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { CalendarDays, Compass, GripVertical, Layers3, Star, X } from 'lucide-react'
-import { mediaEditorState } from '../data/editorState'
+import { getMediaEditorState } from '../data/editorState'
 // NOTE: the dev-only editor API client (../data/localEditorApi) is loaded via
 // dynamic import inside import.meta.env.DEV guards, never statically — the
 // production bundle must not contain any editor endpoint strings.
@@ -27,6 +27,8 @@ type InfoCardProps = {
   dateRangeForPlace: (placeId: PlaceId) => string
   /** Local editor (dev-only): shows the photo curation toolbar in edit mode. */
   editEnabled?: boolean
+  /** In-place refresh after media saves/imports (dev-only; no page reload). */
+  onMediaSaved?: () => Promise<void>
   onSelectPlace?: (placeId: PlaceId) => void
   onOpenPhotos?: (request: PlacePhotoGalleryRequest) => void
   onOpenPlaceDetail?: () => void
@@ -45,6 +47,7 @@ export function InfoCard({
   hiddenPhotoIds,
   dateRangeForPlace,
   editEnabled = false,
+  onMediaSaved,
   onSelectPlace,
   onOpenPhotos,
   onOpenPlaceDetail,
@@ -63,7 +66,7 @@ export function InfoCard({
   const [editorBusy, setEditorBusy] = useState(false)
   const [draggedPhotoId, setDraggedPhotoId] = useState<string>()
   const [draftPhotoIds, setDraftPhotoIds] = useState<string[]>(photos.map((item) => item.id))
-  const [draftHiddenPhotoIds, setDraftHiddenPhotoIds] = useState<string[]>(mediaEditorState.hiddenMediaIds)
+  const [draftHiddenPhotoIds, setDraftHiddenPhotoIds] = useState<string[]>(() => getMediaEditorState().hiddenMediaIds)
   const [draftCoverPhotoId, setDraftCoverPhotoId] = useState<string | undefined>(placeCover?.id)
   const photoByDraftId = new Map(photos.map((item) => [item.id, item]))
   const displayedPhotos = photoEditing
@@ -82,7 +85,7 @@ export function InfoCard({
     setEditorBusy(true)
     setEditorNotice('正在保存照片布局…')
     try {
-      const { updateLocalEditorState, reloadAfterLocalSave } = await import('../data/localEditorApi')
+      const { updateLocalEditorState } = await import('../data/localEditorApi')
       await updateLocalEditorState((current) => ({
         ...current,
         mediaOrderByPlace: { ...current.mediaOrderByPlace, [place.id]: draftPhotoIds },
@@ -91,7 +94,10 @@ export function InfoCard({
           ? { ...current.coverMediaByPlace, [place.id]: draftCoverPhotoId }
           : current.coverMediaByPlace,
       }))
-      reloadAfterLocalSave()
+      await onMediaSaved?.()
+      setEditorNotice('已保存照片布局。')
+      setPhotoEditing(false)
+      setEditorBusy(false)
     } catch (error) {
       setEditorNotice(error instanceof Error ? error.message : '保存失败。')
       setEditorBusy(false)
@@ -104,7 +110,7 @@ export function InfoCard({
     setEditorBusy(true)
     setEditorNotice(`正在接收 ${files.length} 张照片…`)
     try {
-      const { importLocalMedia, reloadAfterLocalSave, uploadLocalMedia } = await import('../data/localEditorApi')
+      const { importLocalMedia, uploadLocalMedia } = await import('../data/localEditorApi')
       const uploadedSourcePaths: string[] = []
       for (const file of Array.from(files)) {
         const uploaded = await uploadLocalMedia({ placeId: place.id, kind: 'photo', file })
@@ -112,7 +118,9 @@ export function InfoCard({
       }
       setEditorNotice('照片已进入私有投递箱，正在生成三级网页资源…')
       await importLocalMedia(uploadedSourcePaths)
-      reloadAfterLocalSave()
+      await onMediaSaved?.()
+      setEditorNotice('照片已导入。')
+      setEditorBusy(false)
     } catch (error) {
       setEditorNotice(error instanceof Error ? error.message : '照片导入失败。')
       setEditorBusy(false)
@@ -295,13 +303,13 @@ export function InfoCard({
                   onToggle={() => {
                     setPhotoEditing((editing) => !editing)
                     setDraftPhotoIds(photos.map((photo) => photo.id))
-                    setDraftHiddenPhotoIds(mediaEditorState.hiddenMediaIds)
+                    setDraftHiddenPhotoIds(getMediaEditorState().hiddenMediaIds)
                     setDraftCoverPhotoId(placeCover?.id)
                     setEditorNotice('')
                   }}
                   onReset={() => {
                     setDraftPhotoIds(photos.map((photo) => photo.id))
-                    setDraftHiddenPhotoIds(mediaEditorState.hiddenMediaIds)
+                    setDraftHiddenPhotoIds(getMediaEditorState().hiddenMediaIds)
                     setDraftCoverPhotoId(placeCover?.id)
                     setEditorNotice('已撤销本轮尚未保存的照片调整。')
                   }}
@@ -332,16 +340,19 @@ export function InfoCard({
                   event.stopPropagation()
                   if (!import.meta.env.DEV) return
                   setEditorBusy(true)
-                  void import('../data/localEditorApi')
-                    .then(({ updateLocalEditorState, reloadAfterLocalSave }) =>
-                      updateLocalEditorState((current) => ({
-                        ...current,
-                        hiddenMediaIds: current.hiddenMediaIds.filter((id) => !hiddenPhotoIdsForPlace.includes(id)),
-                      })).then(reloadAfterLocalSave))
-                    .catch((error: unknown) => {
-                      setEditorNotice(error instanceof Error ? error.message : '恢复失败。')
-                      setEditorBusy(false)
-                    })
+                  void (async () => {
+                    const { updateLocalEditorState } = await import('../data/localEditorApi')
+                    await updateLocalEditorState((current) => ({
+                      ...current,
+                      hiddenMediaIds: current.hiddenMediaIds.filter((id) => !hiddenPhotoIdsForPlace.includes(id)),
+                    }))
+                    await onMediaSaved?.()
+                    setEditorNotice('已恢复隐藏照片。')
+                    setEditorBusy(false)
+                  })().catch((error: unknown) => {
+                    setEditorNotice(error instanceof Error ? error.message : '恢复失败。')
+                    setEditorBusy(false)
+                  })
                 }}
               >
                 恢复本地点已隐藏照片（{hiddenPhotoIdsForPlace.length}）

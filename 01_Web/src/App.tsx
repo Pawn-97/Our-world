@@ -417,6 +417,7 @@ function WorldApp({ content, refresh }: { content: WorldContent; refresh: () => 
                   hiddenPhotoIds={selectedPlace ? content.hiddenMediaIdsByPlaceId[selectedPlace.id] ?? [] : []}
                   dateRangeForPlace={(placeId) => content.dateRangeByPlaceId[placeId] ?? ''}
                   editEnabled={editEnabled}
+                  onMediaSaved={refresh}
                   onSelectPlace={selectPlace}
                   onOpenPhotos={setPlacePhotoGallery}
                   onOpenPlaceDetail={openPlaceDetail}
@@ -516,6 +517,7 @@ function WorldApp({ content, refresh }: { content: WorldContent; refresh: () => 
           onCreateMemory={(visit) => setMemoryEditor({ mode: 'create', visitId: visit.id, placeId: detailPlace.id })}
           onEditMemory={(memory) => setMemoryEditor({ mode: 'edit', memory, placeId: detailPlace.id })}
           onDeleteMemory={(memory) => deleteMemory(memory.id)}
+          onMediaSaved={refresh}
         />
       ) : null}
 

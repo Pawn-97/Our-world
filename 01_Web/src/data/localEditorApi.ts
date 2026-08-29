@@ -30,6 +30,12 @@ export const readLocalEditorState = async () => {
   return (await parseResponse<{ state: MediaEditorState }>(response)).state
 }
 
+/** Fresh import catalog straight from disk (dev middleware read-back). */
+export const readLocalMediaCatalog = async () => {
+  const response = await fetch('/__travelatlas/editor/media', { cache: 'no-store' })
+  return (await parseResponse<{ catalog: unknown }>(response)).catalog
+}
+
 export const updateLocalEditorState = async (
   update: (current: MediaEditorState) => MediaEditorState,
 ) => {
@@ -97,5 +103,3 @@ export const deleteHiddenLocalMedia = async (placeId: string, ids: string[]) => 
   })
   return parseResponse<{ deletedIds: string[]; deletedSourceFiles: number; output: string }>(response)
 }
-
-export const reloadAfterLocalSave = () => window.location.reload()
