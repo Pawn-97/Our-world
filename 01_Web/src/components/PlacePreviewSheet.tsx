@@ -5,12 +5,13 @@ type PlacePreviewSheetProps = {
   city: City
   country?: Country
   onClose: () => void
+  onOpenDetail: () => void
 }
 
 // Mobile-only compact place preview (Milestone 1 spike): shown below the
 // 1100px sidebar breakpoint when a city marker is selected. It floats above
 // the bottom dock so globe gestures and dock controls stay reachable.
-export function PlacePreviewSheet({ city, country, onClose }: PlacePreviewSheetProps) {
+export function PlacePreviewSheet({ city, country, onClose, onOpenDetail }: PlacePreviewSheetProps) {
   const cityName = city.nameZh ?? city.nameEn ?? 'Place'
   const accent = country?.accent ?? '#38bdf8'
 
@@ -47,6 +48,13 @@ export function PlacePreviewSheet({ city, country, onClose }: PlacePreviewSheetP
           {city.summary}
         </p>
       ) : null}
+      <button
+        type="button"
+        onClick={onOpenDetail}
+        className="mt-3 flex h-12 w-full items-center justify-center rounded-full bg-sky-500/90 text-sm font-semibold text-white transition active:scale-[0.98]"
+      >
+        查看详情 · Open
+      </button>
     </section>
   )
 }

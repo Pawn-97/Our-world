@@ -17,6 +17,7 @@ type InfoCardProps = {
   selectedCityId?: CityId
   onSelectCity?: (cityId: CityId) => void
   onOpenCityPhotos?: (request: CityPhotoGalleryRequest) => void
+  onOpenPlaceDetail?: () => void
 }
 
 const continentRules: Array<{ continent: string; regions: string[] }> = [
@@ -40,7 +41,7 @@ const getContinentName = (country?: Country) => {
   return continentRules.find(({ regions }) => regions.some((region) => regionText.includes(region)))?.continent ?? '—'
 }
 
-export function InfoCard({ mode, selectedCountryId, selectedCityId, onSelectCity, onOpenCityPhotos }: InfoCardProps) {
+export function InfoCard({ mode, selectedCountryId, selectedCityId, onSelectCity, onOpenCityPhotos, onOpenPlaceDetail }: InfoCardProps) {
   const country = selectedCountryId ? countryById[selectedCountryId] : undefined
   const city = selectedCityId ? cityById[selectedCityId] : undefined
   const isCityMode = mode === 'city' && city && country
@@ -270,6 +271,16 @@ export function InfoCard({ mode, selectedCountryId, selectedCityId, onSelectCity
               <span className="text-xs font-medium text-slate-500">{city.nameEn}</span>
             </div>
           </div>
+        ) : null}
+
+        {isCityMode && onOpenPlaceDetail ? (
+          <button
+            type="button"
+            onClick={onOpenPlaceDetail}
+            className="atlas-panel-body flex h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-950/80 bg-slate-950 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(15,23,42,0.2)] transition hover:bg-slate-800 active:scale-[0.98]"
+          >
+            查看详情 · Open place
+          </button>
         ) : null}
 
         <div className="grid shrink-0 grid-cols-2 gap-3">

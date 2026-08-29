@@ -27,6 +27,7 @@ type CountrySelectorProps = {
 }
 
 const scaleLabelForDistance = (distance: number) => {
+  if (distance < 1.15) return 'Street'
   if (distance < 1.68) return 'City'
   if (distance < 2.55) return 'Country'
   return 'World'
@@ -586,6 +587,7 @@ export function CountrySelector({
               onPointerUp={(event) => commitGlobeDistance(Number(event.currentTarget.value))}
             />
             <div className="mt-1 flex justify-between text-[11px] font-medium text-slate-400">
+              <span>Street</span>
               <span>City</span>
               <span>Country</span>
               <span>World</span>

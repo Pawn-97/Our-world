@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react'
 import { AtlasHeader } from './components/AtlasHeader'
 import { CesiumAtlasGlobe } from './components/CesiumAtlasGlobe'
 import { CountrySelector } from './components/CountrySelector'
 import { MapSourceSwitcher } from './components/MapSourceSwitcher'
-import { MouseControlGuide } from './components/MouseControlGuide'
 import { InfoCard } from './components/InfoCard'
 import { PlacePreviewSheet } from './components/PlacePreviewSheet'
+import { PlaceDetailOverlay } from './components/PlaceDetailOverlay'
 import { CityPhotoGalleryModal } from './components/CityPhotoGalleryModal'
 import type { CityPhotoGalleryRequest } from './components/CityPhotoGalleryModal'
 import { getInitialMapSource, rememberMapSource } from './data/mapSources'
@@ -21,9 +21,11 @@ type ThemeMode = 'day' | 'night'
 const overviewDistance = 3.25
 const countryDistance = 1.95
 const cityDistance = 1.38
+const streetDistance = 1.08
 const sidebarMediaQuery = '(min-width: 1100px)'
+const panelIdleHideDelayMs = 4_000
 
-type CameraScale = 'city' | 'country' | 'world'
+type CameraScale = 'street' | 'city' | 'country' | 'world'
 type ImageryTuning = {
   brightness: number
   contrast: number
@@ -36,6 +38,7 @@ const imageryTuningDefaults: Record<ThemeMode, ImageryTuning> = {
 }
 
 const cameraScaleForDistance = (distance: number): CameraScale => {
+  if (distance < 1.15) return 'street'
   if (distance < 1.68) return 'city'
   if (distance < 2.55) return 'country'
   return 'world'
@@ -51,15 +54,26 @@ function App() {
   const [imageryTuningByTheme, setImageryTuningByTheme] = useState(imageryTuningDefaults)
   const [mapSource, setMapSource] = useState<MapSourceId>(getInitialMapSource)
   const [cityPhotoGallery, setCityPhotoGallery] = useState<CityPhotoGalleryRequest>()
+  const [placeDetailOpen, setPlaceDetailOpen] = useState(false)
   const [sidebarsOpen, setSidebarsOpen] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(sidebarMediaQuery).matches,
   )
+  const [isNarrowLayout, setIsNarrowLayout] = useState(() =>
+    typeof window === 'undefined' ? false : !window.matchMedia(sidebarMediaQuery).matches,
+  )
+  const [panelsIdleHidden, setPanelsIdleHidden] = useState(false)
   const [qualityMode] = useState<GlobeQualityMode>(detectGlobeQualityMode)
+  const panelHoverRef = useRef(false)
+  const panelFocusRef = useRef(false)
+  const panelIdleTimerRef = useRef<number | undefined>(undefined)
   const activeTheme: ThemeMode = 'night'
   const imageryTuning = {
     ...imageryTuningDefaults[activeTheme],
     ...imageryTuningByTheme[activeTheme],
   }
+  // Idle auto-hide only applies to the wide desktop layout; narrow screens
+  // keep their default-hidden overlay panels.
+  const panelsVisible = sidebarsOpen && !panelsIdleHidden
 
   const updateImageryTuning = (property: keyof ImageryTuning, value: number) => {
     setImageryTuningByTheme((current) => ({
@@ -81,15 +95,56 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = 'zh-CN'
     const mediaQuery = window.matchMedia(sidebarMediaQuery)
-    const syncSidebarVisibility = (event: MediaQueryListEvent) => setSidebarsOpen(event.matches)
+    const syncLayout = (event: MediaQueryListEvent) => {
+      setSidebarsOpen(event.matches)
+      setIsNarrowLayout(!event.matches)
+    }
 
-    mediaQuery.addEventListener('change', syncSidebarVisibility)
-    return () => mediaQuery.removeEventListener('change', syncSidebarVisibility)
+    mediaQuery.addEventListener('change', syncLayout)
+    return () => mediaQuery.removeEventListener('change', syncLayout)
   }, [])
+
+  // Desktop idle auto-hide: after ~4s without pointer/keyboard activity or
+  // selection changes, both side panels fade out for immersion. Any activity
+  // brings them back. Never hides while a panel is hovered or focused.
+  const selectionKey = `${selectionMode}:${selectedCountryId ?? ''}:${selectedCityId ?? ''}`
+  const [lastSelectionKey, setLastSelectionKey] = useState(selectionKey)
+  if (selectionKey !== lastSelectionKey) {
+    // Render-time state adjustment: a selection change always wakes panels.
+    setLastSelectionKey(selectionKey)
+    setPanelsIdleHidden(false)
+  }
+
+  useEffect(() => {
+    if (isNarrowLayout || !sidebarsOpen) return undefined
+
+    const scheduleIdleHide = () => {
+      window.clearTimeout(panelIdleTimerRef.current)
+      panelIdleTimerRef.current = window.setTimeout(() => {
+        if (!panelHoverRef.current && !panelFocusRef.current) setPanelsIdleHidden(true)
+      }, panelIdleHideDelayMs)
+    }
+    const handleActivity = () => {
+      setPanelsIdleHidden(false)
+      scheduleIdleHide()
+    }
+
+    scheduleIdleHide()
+    window.addEventListener('pointermove', handleActivity, { passive: true })
+    window.addEventListener('pointerdown', handleActivity, { passive: true })
+    window.addEventListener('keydown', handleActivity)
+    return () => {
+      window.clearTimeout(panelIdleTimerRef.current)
+      window.removeEventListener('pointermove', handleActivity)
+      window.removeEventListener('pointerdown', handleActivity)
+      window.removeEventListener('keydown', handleActivity)
+    }
+  }, [isNarrowLayout, sidebarsOpen, selectedCountryId, selectedCityId, selectionMode])
 
   const resetOverview = () => {
     setSelectedCountryId(undefined)
     setSelectedCityId(undefined)
+    setPlaceDetailOpen(false)
     setSelectionMode('overview')
     setGlobeDistance(overviewDistance)
     setGlobeResetVersion((version) => version + 1)
@@ -103,13 +158,24 @@ function App() {
 
     setSelectedCountryId(countryId)
     setSelectedCityId(undefined)
+    setPlaceDetailOpen(false)
     setSelectionMode('country')
     setGlobeDistance(countryDistance)
+    if (isNarrowLayout) setSidebarsOpen(false)
   }
 
   const selectCity = (cityId: CityId) => {
     if (selectedCityId === cityId) {
+      // Second activation on an already-selected place drills into the
+      // street/district level; a third activation toggles the selection off.
+      if (globeDistance > streetDistance + 0.001) {
+        setSelectionMode('city')
+        setGlobeDistance(streetDistance)
+        if (isNarrowLayout) setSidebarsOpen(false)
+        return
+      }
       setSelectedCityId(undefined)
+      setPlaceDetailOpen(false)
       setSelectionMode('country')
       setGlobeDistance(countryDistance)
       return
@@ -118,8 +184,10 @@ function App() {
     const city = cityById[cityId]
     if (city.countryId) setSelectedCountryId(city.countryId)
     setSelectedCityId(cityId)
+    setPlaceDetailOpen(false)
     setSelectionMode('city')
     setGlobeDistance(cityDistance)
+    if (isNarrowLayout) setSidebarsOpen(false)
   }
 
   const closePlacePreview = () => {
@@ -128,12 +196,16 @@ function App() {
     setGlobeDistance(selectedCountryId ? countryDistance : overviewDistance)
   }
 
+  const openPlaceDetail = () => {
+    if (selectedCityId) setPlaceDetailOpen(true)
+  }
+
   const changeGlobeDistance = (distance: number) => {
     if (Math.abs(distance - globeDistance) <= 0.001) return
 
     const cameraScale = cameraScaleForDistance(distance)
 
-    if (cameraScale === 'city') {
+    if (cameraScale === 'city' || cameraScale === 'street') {
       if (selectedCityId) {
         setSelectionMode('city')
       } else if (selectedCountryId) {
@@ -162,6 +234,7 @@ function App() {
   const mobilePlacePreview = !sidebarsOpen && selectionMode === 'city' && selectedCityId
     ? cityById[selectedCityId]
     : undefined
+  const detailCity = placeDetailOpen && selectedCityId ? cityById[selectedCityId] : undefined
 
   return (
     <main className="theme-night relative h-[100dvh] overflow-hidden bg-[#010409] text-slate-950">
@@ -172,7 +245,7 @@ function App() {
       <section
         className="atlas-experience cesium-lab-page relative h-[100dvh] w-screen overflow-hidden"
         data-page="map"
-        data-sidebars-open={sidebarsOpen}
+        data-sidebars-open={panelsVisible}
       >
           <div className="absolute inset-0 z-0">
             <CesiumAtlasGlobe
@@ -187,16 +260,43 @@ function App() {
               globeScale={globeDistance}
               resetVersion={globeResetVersion}
               isNight={activeTheme === 'night'}
+              showMapContent={!placeDetailOpen}
               qualityMode={qualityMode}
               onSelectCity={selectCity}
             />
           </div>
 
-          <div className="pointer-events-none absolute inset-0 z-20">
+          {isNarrowLayout && sidebarsOpen ? (
+            <button
+              type="button"
+              aria-label="关闭面板"
+              title="关闭面板"
+              className="fixed inset-0 z-10 cursor-default bg-slate-950/45 backdrop-blur-[2px]"
+              onClick={() => setSidebarsOpen(false)}
+            />
+          ) : null}
+
+          <div
+            className="pointer-events-none absolute inset-0 z-20"
+            onPointerEnter={() => {
+              panelHoverRef.current = true
+              setPanelsIdleHidden(false)
+            }}
+            onPointerLeave={() => {
+              panelHoverRef.current = false
+            }}
+            onFocusCapture={() => {
+              panelFocusRef.current = true
+              setPanelsIdleHidden(false)
+            }}
+            onBlurCapture={() => {
+              panelFocusRef.current = false
+            }}
+          >
             <div
               className="atlas-overlay-frame absolute bottom-0"
               data-page="map"
-              data-sidebars-open={sidebarsOpen}
+              data-sidebars-open={panelsVisible}
             >
               <CountrySelector
                 selectedCountryId={selectedCountryId}
@@ -224,9 +324,8 @@ function App() {
                   selectedCityId={selectedCityId}
                   onSelectCity={selectCity}
                   onOpenCityPhotos={setCityPhotoGallery}
+                  onOpenPlaceDetail={openPlaceDetail}
                 />
-
-                <MouseControlGuide language="zh" />
               </div>
 
             </div>
@@ -235,14 +334,26 @@ function App() {
           <div className="atlas-map-controls">
             <button
               type="button"
+              className="atlas-dock-button pointer-events-auto"
+              aria-label="重置到全球视图"
+              title="重置到全球视图"
+              onClick={resetOverview}
+            >
+              <RotateCcw />
+            </button>
+            <button
+              type="button"
               className="atlas-dock-button atlas-sidebars-toggle pointer-events-auto"
-              aria-pressed={sidebarsOpen}
-              aria-label={sidebarsOpen ? 'Hide both sidebars' : 'Show both sidebars'}
-              title={sidebarsOpen ? '隐藏侧边栏' : '显示侧边栏'}
-              onClick={() => setSidebarsOpen((open) => !open)}
+              aria-pressed={panelsVisible}
+              aria-label={panelsVisible ? 'Hide both sidebars' : 'Show both sidebars'}
+              title={panelsVisible ? '隐藏侧边栏' : '显示侧边栏'}
+              onClick={() => {
+                setPanelsIdleHidden(false)
+                setSidebarsOpen((open) => !open)
+              }}
             >
               <span className="atlas-sidebars-toggle-icons" aria-hidden="true">
-                {sidebarsOpen ? (
+                {panelsVisible ? (
                   <>
                     <PanelLeftClose />
                     <PanelRightClose />
@@ -270,6 +381,16 @@ function App() {
           city={mobilePlacePreview}
           country={mobilePlacePreview.countryId ? countryById[mobilePlacePreview.countryId] : undefined}
           onClose={closePlacePreview}
+          onOpenDetail={openPlaceDetail}
+        />
+      ) : null}
+
+      {detailCity ? (
+        <PlaceDetailOverlay
+          city={detailCity}
+          country={detailCity.countryId ? countryById[detailCity.countryId] : undefined}
+          onClose={() => setPlaceDetailOpen(false)}
+          onOpenPhotos={setCityPhotoGallery}
         />
       ) : null}
 

@@ -5,6 +5,7 @@ import {
   Cartesian2,
   Cartesian3,
   Cartographic,
+  Cesium3DTileset,
   Color,
   EllipsoidGeodesic,
   HeadingPitchRange,
@@ -102,20 +103,24 @@ const cityHoverMarkerImage = (accent: string, corePixelSize: number) => {
   return image
 }
 
-type CameraScale = 'world' | 'country' | 'city'
+type CameraScale = 'world' | 'country' | 'city' | 'street'
 
 const maximumZoomDistance = 22_000_000
 
+// M1.5 retune: city is now a true city-scale view (~60 km) and street is a
+// district drill-in (~3 km); country tightened to ~1 300 km; world unchanged.
 const cameraScaleStates: Record<
   CameraScale,
   { rangeOrHeight: number; pitch: number; duration: number }
 > = {
   world: { rangeOrHeight: maximumZoomDistance, pitch: -90, duration: 1.2 },
-  country: { rangeOrHeight: 3_100_000, pitch: -62, duration: 1.3 },
-  city: { rangeOrHeight: 680_000, pitch: -48, duration: 1.35 },
+  country: { rangeOrHeight: 1_300_000, pitch: -62, duration: 1.3 },
+  city: { rangeOrHeight: 60_000, pitch: -50, duration: 1.35 },
+  street: { rangeOrHeight: 3_000, pitch: -55, duration: 1.2 },
 }
 
 const cameraScaleForGlobeScale = (scale: number): CameraScale => {
+  if (scale < 1.15) return 'street'
   if (scale < 1.68) return 'city'
   if (scale < 2.55) return 'country'
   return 'world'
@@ -296,6 +301,8 @@ export function CesiumAtlasGlobe({
   // Sparse datasets (e.g. the 3-place spike) keep every marker labeled and
   // slightly larger so places read clearly at world and country scale.
   const sparseMarkerSet = mappedCities.length <= 12
+  // Coarse pointers (reduced quality mode) need bigger tap targets.
+  const markerSizeBoost = qualityMode === 'reduced' ? 8 : 0
 
   const journeyVisitCounts = useMemo(
     () =>
@@ -504,6 +511,40 @@ export function CesiumAtlasGlobe({
     configureViewer(viewer, qualityMode)
   }, [qualityMode, viewerReadyVersion])
 
+  // Cesium OSM Buildings (ion asset 96188) for city/street drill-in.
+  // Only in high quality mode with the Cesium ion imagery source active;
+  // skipped entirely for reduced mode and local/tianditu imagery.
+  useEffect(() => {
+    if (qualityMode !== 'high' || mapSource !== 'cesium') return undefined
+
+    const viewer = viewerRef.current?.cesiumElement
+    if (!viewer) return undefined
+
+    let cancelled = false
+    let tileset: Cesium3DTileset | undefined
+
+    Cesium3DTileset.fromIonAssetId(96188)
+      .then((loadedTileset) => {
+        if (cancelled || viewer.isDestroyed()) {
+          loadedTileset.destroy()
+          return
+        }
+        tileset = loadedTileset
+        viewer.scene.primitives.add(loadedTileset)
+      })
+      .catch((error: unknown) => {
+        console.warn('[osm-buildings] failed to load ion asset 96188', error)
+      })
+
+    return () => {
+      cancelled = true
+      if (tileset && !viewer.isDestroyed()) {
+        viewer.scene.primitives.remove(tileset)
+        tileset = undefined
+      }
+    }
+  }, [mapSource, qualityMode, viewerReadyVersion])
+
   useEffect(() => {
     if (cameraScale !== 'world') return undefined
 
@@ -603,12 +644,24 @@ export function CesiumAtlasGlobe({
       updateVisibleHemisphere()
       viewer.scene.postRender.removeEventListener(updateAfterFirstRender)
     }
+    // Continuous camera motion (drags, inertia) only fires `changed` when the
+    // delta exceeds percentageChanged; add a throttled preRender recompute so
+    // back-side labels never linger mid-drag.
+    let lastMotionCullAt = 0
+    const cullDuringCameraMotion = () => {
+      const now = performance.now()
+      if (now - lastMotionCullAt < 250) return
+      lastMotionCullAt = now
+      updateVisibleHemisphere()
+    }
     viewer.scene.postRender.addEventListener(updateAfterFirstRender)
+    viewer.scene.preRender.addEventListener(cullDuringCameraMotion)
     viewer.camera.changed.addEventListener(updateVisibleHemisphere)
     viewer.camera.moveEnd.addEventListener(updateVisibleHemisphere)
 
     return () => {
       viewer.scene.postRender.removeEventListener(updateAfterFirstRender)
+      viewer.scene.preRender.removeEventListener(cullDuringCameraMotion)
       viewer.camera.changed.removeEventListener(updateVisibleHemisphere)
       viewer.camera.moveEnd.removeEventListener(updateVisibleHemisphere)
       updateVisibleHemisphereRef.current = () => undefined
@@ -733,7 +786,11 @@ export function CesiumAtlasGlobe({
         currentViewer.camera.flyToBoundingSphere(
           new BoundingSphere(
             targetPosition,
-            cameraScale === 'country' ? 150_000 : 15_000,
+            cameraScale === 'country'
+              ? 120_000
+              : cameraScale === 'city'
+                ? 6_000
+                : 400,
           ),
           {
             duration: cameraState.duration,
@@ -881,7 +938,7 @@ export function CesiumAtlasGlobe({
           const visitCount = journeyVisitCounts[city.id] ?? 1
           const isMuted =
             selectionMode !== 'overview' && !isSelected && !isCountryCity
-          const corePixelSize = isCountryCity ? 12 : sparseMarkerSet ? 11 : 7
+          const corePixelSize = (isCountryCity ? 12 : sparseMarkerSet ? 11 : 7) + markerSizeBoost
           const showHoverGlow = isHoveredCountryCity && !isSelected
 
           return (
@@ -903,7 +960,7 @@ export function CesiumAtlasGlobe({
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
                 outlineColor: Color.WHITE.withAlpha(isMuted ? 0.36 : 0.94),
                 outlineWidth: isSelected ? 3 : 2,
-                pixelSize: isSelected ? 18 : corePixelSize,
+                pixelSize: isSelected ? 18 + markerSizeBoost : corePixelSize,
               }}
               label={{
                 backgroundColor: Color.fromCssColorString(
