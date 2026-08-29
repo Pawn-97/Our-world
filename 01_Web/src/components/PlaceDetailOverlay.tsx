@@ -3,6 +3,7 @@ import { ArrowLeft, ImagePlus, Loader2, X } from 'lucide-react'
 import { localEditorAvailable } from '../data/editorState'
 import { importLocalMedia, reloadAfterLocalSave, uploadLocalMedia } from '../data/localEditorApi'
 import type { CountryGroup } from '../domain/viewModel'
+import { getVisitStatus, isCompletedVisit, selectVisits } from '../domain/viewModel'
 import { placeStatusLabels } from '../domain/types'
 import type { Media, Memory, Place, Visit, VisitId } from '../domain/types'
 import { mediaService } from '../services/mediaService'
@@ -51,6 +52,11 @@ export function PlaceDetailOverlay({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [addMediaState, setAddMediaState] = useState<AddMediaState>({ phase: 'idle' })
   const addMediaBusy = addMediaState.phase === 'uploading' || addMediaState.phase === 'importing'
+  // Visit selection: 'all' shows every visit's memories; picking one visit
+  // narrows the memory list to that trip.
+  const [selectedVisitId, setSelectedVisitId] = useState<VisitId | 'all'>('all')
+  const selectedVisits = selectVisits(visits, selectedVisitId)
+  const hasCompletedVisits = visits.some(isCompletedVisit)
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -164,24 +170,83 @@ export function PlaceDetailOverlay({
           </p>
         ) : null}
 
+        {place.status === 'wishlist' && place.wishlistReason ? (
+          <section className="mt-10">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              想去理由 · Why
+            </h2>
+            <p
+              className="mt-4 rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-sm leading-7 text-slate-300"
+            >
+              {place.wishlistReason}
+            </p>
+          </section>
+        ) : null}
+
         {visits.length > 0 ? (
           <section className="mt-10">
             <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-              到访 · Visits
+              {hasCompletedVisits ? '到访 · Visits' : '计划 · Plans'}
             </h2>
+            {visits.length > 1 ? (
+              <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="选择到访">
+                <button
+                  type="button"
+                  aria-pressed={selectedVisitId === 'all'}
+                  onClick={() => setSelectedVisitId('all')}
+                  className={`flex h-9 items-center rounded-full border px-4 text-xs font-semibold transition ${
+                    selectedVisitId === 'all'
+                      ? 'border-sky-300/80 bg-sky-400/20 text-sky-100'
+                      : 'border-white/14 bg-white/[0.06] text-slate-300 hover:bg-white/12'
+                  }`}
+                >
+                  全部到访
+                </button>
+                {visits.map((visit) => {
+                  const isActive = selectedVisitId === visit.id
+                  const isPlanned = getVisitStatus(visit) === 'planned'
+                  return (
+                    <button
+                      key={visit.id}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedVisitId(isActive ? 'all' : visit.id)}
+                      className={`flex h-9 items-center gap-2 rounded-full border px-4 text-xs font-semibold transition ${
+                        isActive
+                          ? 'border-sky-300/80 bg-sky-400/20 text-sky-100'
+                          : 'border-white/14 bg-white/[0.06] text-slate-300 hover:bg-white/12'
+                      }`}
+                    >
+                      {visit.title ?? formatVisitDates(visit)}
+                      {isPlanned ? (
+                        <span className="rounded-full border border-white/24 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                          计划中
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
             <div className="mt-4 space-y-6">
-              {visits.map((visit) => {
+              {selectedVisits.map((visit) => {
                 const visitMemories = memoriesByVisitId[visit.id] ?? []
+                const isPlanned = getVisitStatus(visit) === 'planned'
                 return (
                   <article
                     key={visit.id}
                     className="rounded-3xl border border-white/10 bg-white/[0.04] p-5"
                   >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
                       {formatVisitDates(visit)}
+                      {isPlanned ? (
+                        <span className="rounded-full border border-white/24 px-1.5 py-0.5 text-[10px] font-medium tracking-normal text-slate-400">
+                          计划中
+                        </span>
+                      ) : null}
                     </p>
                     <h3 className="mt-1.5 text-lg font-semibold text-slate-100">
-                      {visit.title ?? '未命名行程'}
+                      {visit.title ?? (isPlanned ? '计划行程' : '未命名行程')}
                     </h3>
                     {visit.summary ? (
                       <p className="mt-1.5 text-sm leading-6 text-slate-400">{visit.summary}</p>
@@ -204,6 +269,15 @@ export function PlaceDetailOverlay({
                   </article>
                 )
               })}
+            </div>
+          </section>
+        ) : place.status === 'planned' ? (
+          <section className="mt-10">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              计划 · Plans
+            </h2>
+            <div className="mt-4 rounded-3xl border border-dashed border-white/14 bg-white/[0.04] p-5 text-sm leading-6 text-slate-400">
+              计划日期：待定。确定行程后，在 content/visits.json 里添加一条 planned visit。
             </div>
           </section>
         ) : null}

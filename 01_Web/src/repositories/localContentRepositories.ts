@@ -89,6 +89,7 @@ export const parsePlace = (value: unknown): Place => {
     longitude: requireNumber(value.longitude, `${label}.longitude`),
     status,
     summary: optionalString(value.summary, `${label}.summary`),
+    wishlistReason: optionalString(value.wishlistReason, `${label}.wishlistReason`),
     coverMediaId: optionalString(value.coverMediaId, `${label}.coverMediaId`),
     createdAt: requireString(value.createdAt, `${label}.createdAt`),
     updatedAt: requireString(value.updatedAt, `${label}.updatedAt`),
@@ -98,9 +99,14 @@ export const parsePlace = (value: unknown): Place => {
 export const parseVisit = (value: unknown): Visit => {
   if (!isRecord(value)) throw new ContentParseError('visits.json: expected visit objects.')
   const label = `visit "${String(value.id ?? '?')}"`
+  const status = value.status === undefined ? undefined : requireString(value.status, `${label}.status`)
+  if (status !== undefined && status !== 'completed' && status !== 'planned') {
+    throw new ContentParseError(`${label}.status: unknown status "${status}".`)
+  }
   return {
     id: requireString(value.id, 'visit.id'),
     placeId: requireString(value.placeId, `${label}.placeId`),
+    status,
     startDate: optionalString(value.startDate, `${label}.startDate`),
     endDate: optionalString(value.endDate, `${label}.endDate`),
     title: optionalString(value.title, `${label}.title`),

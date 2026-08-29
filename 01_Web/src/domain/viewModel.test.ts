@@ -8,7 +8,11 @@ import {
   deriveCountryGroups,
   deriveRoutes,
   formatVisitDateRange,
+  getVisitStatus,
+  isCompletedVisit,
+  latestVisitDate,
   orderVisitsChronologically,
+  selectVisits,
   slugify,
 } from './viewModel'
 
@@ -112,6 +116,75 @@ describe('orderVisitsChronologically', () => {
     orderVisitsChronologically(visits)
     expect(visits.map((visit) => visit.id)).toEqual(['visit-b', 'visit-a'])
   })
+
+  it('sorts future planned visits after past completed ones by date', () => {
+    const visits = [
+      makeVisit({ id: 'visit-paris-2026-10', placeId: 'place-paris', status: 'planned', startDate: '2026-10-03' }),
+      makeVisit({ id: 'visit-tokyo-2023-10', placeId: 'place-tokyo', startDate: '2023-10-02' }),
+      makeVisit({ id: 'visit-tokyo-2025-04', placeId: 'place-tokyo', startDate: '2025-04-02' }),
+    ]
+    expect(orderVisitsChronologically(visits).map((visit) => visit.id)).toEqual([
+      'visit-tokyo-2023-10',
+      'visit-tokyo-2025-04',
+      'visit-paris-2026-10',
+    ])
+  })
+})
+
+describe('visit status helpers', () => {
+  it('treats a visit without status as completed', () => {
+    const visit = makeVisit({ id: 'visit-a' })
+    expect(getVisitStatus(visit)).toBe('completed')
+    expect(isCompletedVisit(visit)).toBe(true)
+  })
+
+  it('reads an explicit planned status', () => {
+    const visit = makeVisit({ id: 'visit-a', status: 'planned' })
+    expect(getVisitStatus(visit)).toBe('planned')
+    expect(isCompletedVisit(visit)).toBe(false)
+  })
+})
+
+describe('selectVisits', () => {
+  const visits = [
+    makeVisit({ id: 'visit-a', startDate: '2023-10-02' }),
+    makeVisit({ id: 'visit-b', startDate: '2025-04-02' }),
+  ]
+
+  it('keeps every visit for the all selection', () => {
+    expect(selectVisits(visits, 'all').map((visit) => visit.id)).toEqual(['visit-a', 'visit-b'])
+  })
+
+  it('narrows to the chosen visit', () => {
+    expect(selectVisits(visits, 'visit-b').map((visit) => visit.id)).toEqual(['visit-b'])
+  })
+
+  it('falls back to all visits for an unknown id', () => {
+    expect(selectVisits(visits, 'visit-ghost')).toHaveLength(2)
+  })
+})
+
+describe('latestVisitDate', () => {
+  it('returns the latest boundary date across completed visits', () => {
+    const visits = [
+      makeVisit({ id: 'visit-a', startDate: '2023-10-02', endDate: '2023-10-07' }),
+      makeVisit({ id: 'visit-b', startDate: '2025-04-02' }),
+    ]
+    expect(latestVisitDate(visits)).toBe('2025-04-02')
+  })
+
+  it('ignores planned visits', () => {
+    const visits = [
+      makeVisit({ id: 'visit-a', startDate: '2025-04-02' }),
+      makeVisit({ id: 'visit-b', status: 'planned', startDate: '2026-10-03', endDate: '2026-10-10' }),
+    ]
+    expect(latestVisitDate(visits)).toBe('2025-04-02')
+  })
+
+  it('returns undefined when no completed visit has a date', () => {
+    expect(latestVisitDate([makeVisit({ id: 'visit-a', status: 'planned', startDate: '2026-10-03' })])).toBeUndefined()
+    expect(latestVisitDate([])).toBeUndefined()
+  })
 })
 
 describe('formatVisitDateRange', () => {
@@ -162,6 +235,14 @@ describe('deriveCountryGroups', () => {
 
   it('keeps no-visit groups at zero visits with an unknown date range', () => {
     const groups = deriveCountryGroups([paris], [])
+    expect(groups[0]?.visitCount).toBe(0)
+    expect(groups[0]?.dateRangeLabel).toBe('Date unknown')
+  })
+
+  it('does not count planned visits toward visit totals or date ranges', () => {
+    const groups = deriveCountryGroups([paris], [
+      makeVisit({ id: 'visit-paris-2026-10', placeId: 'place-paris', status: 'planned', startDate: '2026-10-03', endDate: '2026-10-10' }),
+    ])
     expect(groups[0]?.visitCount).toBe(0)
     expect(groups[0]?.dateRangeLabel).toBe('Date unknown')
   })
@@ -218,5 +299,23 @@ describe('deriveRoutes', () => {
       makeVisit({ id: 'visit-ghost-2024-01', placeId: 'place-ghost', startDate: '2024-01-01' }),
     ]
     expect(deriveRoutes(places, visits)).toEqual([])
+  })
+
+  it('never draws arcs for planned visits', () => {
+    const visits = [
+      makeVisit({ id: 'visit-tokyo-2023-10', placeId: 'place-tokyo', startDate: '2023-10-02' }),
+      makeVisit({ id: 'visit-paris-2026-10', placeId: 'place-paris', status: 'planned', startDate: '2026-10-03' }),
+    ]
+    expect(deriveRoutes(places, visits)).toEqual([])
+  })
+
+  it('connects completed visits across an interleaved planned visit', () => {
+    const visits = [
+      makeVisit({ id: 'visit-tokyo-2023-10', placeId: 'place-tokyo', startDate: '2023-10-02' }),
+      makeVisit({ id: 'visit-kyoto-2024-05', placeId: 'place-kyoto', startDate: '2024-05-01' }),
+      makeVisit({ id: 'visit-paris-2026-10', placeId: 'place-paris', status: 'planned', startDate: '2026-10-03' }),
+    ]
+    const routes = deriveRoutes(places, visits)
+    expect(routes.map((route) => route.id)).toEqual(['route-visit-tokyo-2023-10--visit-kyoto-2024-05'])
   })
 })

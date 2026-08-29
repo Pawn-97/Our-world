@@ -8,6 +8,13 @@ export type MemoryType = 'note' | 'activity' | 'photo'
 
 export type MediaType = 'image' | 'video'
 
+/**
+ * Visit lifecycle. Absent `status` means 'completed' (a past visit).
+ * 'planned' marks a future/intended visit: it never draws globe routes and
+ * does not count toward visit counts or date ranges.
+ */
+export type VisitStatus = 'completed' | 'planned'
+
 // Stable IDs are readable slugs (see content/README.md). They are never
 // array indexes, display names, or file names.
 export type WorldId = string
@@ -52,6 +59,8 @@ export type Place = {
   longitude: number
   status: PlaceStatus
   summary?: string
+  /** Why this wishlist place matters; shown on the detail page. */
+  wishlistReason?: string
   coverMediaId?: MediaId
   createdAt: string
   updatedAt: string
@@ -60,6 +69,8 @@ export type Place = {
 export type Visit = {
   id: VisitId
   placeId: PlaceId
+  /** Lifecycle; omitted means 'completed'. */
+  status?: VisitStatus
   /** YYYY-MM-DD or YYYY-MM. */
   startDate?: string
   /** YYYY-MM-DD or YYYY-MM; never earlier than startDate. */
@@ -112,5 +123,10 @@ export type SelectionMode = 'overview' | 'country' | 'place'
 export const placeStatusLabels: Record<PlaceStatus, string> = {
   visited: '已到访',
   planned: '计划中',
-  wishlist: '心愿单',
+  wishlist: '想去',
+}
+
+export const visitStatusLabels: Record<VisitStatus, string> = {
+  completed: '已完成',
+  planned: '计划中',
 }

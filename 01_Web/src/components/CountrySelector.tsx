@@ -1,9 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, MapPin, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import type { CountryGroup } from '../domain/viewModel'
 import { placeStatusLabels } from '../domain/types'
-import type { CountryGroupId, PlaceId } from '../domain/types'
+import type { CountryGroupId, PlaceId, PlaceStatus } from '../domain/types'
 import { statusDotStyle } from './placeStatusStyle'
+
+type StatusFilter = PlaceStatus | 'all'
+
+const statusFilterOptions: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'visited', label: placeStatusLabels.visited },
+  { value: 'planned', label: placeStatusLabels.planned },
+  { value: 'wishlist', label: placeStatusLabels.wishlist },
+]
 
 type CountrySelectorProps = {
   countryGroups: CountryGroup[]
@@ -66,6 +75,21 @@ export function CountrySelector({
   const hasDraftDistanceChangeRef = useRef(false)
   const [isImageTuningOpen, setIsImageTuningOpen] = useState(false)
   const [isGlobeScaleOpen, setIsGlobeScaleOpen] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+
+  // The status filter narrows the place list across all country groups;
+  // groups with no matching places drop out while a filter is active.
+  const visibleGroups = useMemo(
+    () => countryGroups
+      .map((group) => ({
+        ...group,
+        places: statusFilter === 'all'
+          ? group.places
+          : group.places.filter((place) => place.status === statusFilter),
+      }))
+      .filter((group) => statusFilter === 'all' || group.places.length > 0),
+    [countryGroups, statusFilter],
+  )
 
   useEffect(() => {
     committedDistanceRef.current = globeDistance
@@ -95,8 +119,45 @@ export function CountrySelector({
         </div>
       </div>
 
+      <div
+        className="atlas-panel-body mb-3 flex shrink-0 flex-wrap gap-1.5"
+        role="group"
+        aria-label="按状态筛选地点"
+      >
+        {statusFilterOptions.map((option) => {
+          const isActive = option.value === statusFilter
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => setStatusFilter(option.value)}
+              className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition ${
+                isActive
+                  ? 'border-slate-950 bg-slate-950 text-white'
+                  : 'border-white/70 bg-white/55 text-slate-600 hover:bg-white/85'
+              }`}
+            >
+              {option.value !== 'all' ? (
+                <span
+                  className="inline-block size-2 shrink-0 rounded-full"
+                  style={statusDotStyle(option.value, '#0ea5e9')}
+                  aria-hidden="true"
+                />
+              ) : null}
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+
       <div className="atlas-country-list atlas-panel-body selector-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
-        {countryGroups.map((group) => {
+        {visibleGroups.length === 0 ? (
+          <p className="px-2 py-6 text-center text-xs text-slate-500">
+            当前筛选下没有地点。
+          </p>
+        ) : null}
+        {visibleGroups.map((group) => {
           const isSelected = group.id === selectedCountryGroupId
 
           return (

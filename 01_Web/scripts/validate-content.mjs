@@ -18,6 +18,7 @@ const ID_PATTERNS = {
 }
 
 const PLACE_STATUSES = new Set(['wishlist', 'planned', 'visited'])
+const VISIT_STATUSES = new Set(['completed', 'planned'])
 const MEMORY_TYPES = new Set(['note', 'activity', 'photo'])
 const MEDIA_TYPES = new Set(['image', 'video'])
 const DATE_PATTERN = /^\d{4}-\d{2}(-\d{2})?$/
@@ -122,6 +123,9 @@ const validatePlaces = (errors, places, worldId, mediaIds) => {
     if (!PLACE_STATUSES.has(place.status)) {
       errors.push(`${label}: status "${place.status}" must be one of ${[...PLACE_STATUSES].join(', ')}.`)
     }
+    if (place.wishlistReason !== undefined && !isNonEmptyString(place.wishlistReason)) {
+      errors.push(`${label}: wishlistReason must be a non-empty string when present.`)
+    }
     if (place.coverMediaId !== undefined && !mediaIds.has(place.coverMediaId)) {
       errors.push(`${label}: coverMediaId "${place.coverMediaId}" does not reference an existing media record.`)
     }
@@ -145,6 +149,9 @@ const validateVisits = (errors, visits, placeIds) => {
     checkId(errors, visit.id, ID_PATTERNS.visit, label, visitIds)
     if (!isNonEmptyString(visit.placeId) || !placeIds.has(visit.placeId)) {
       errors.push(`${label}: placeId "${visit.placeId}" does not reference an existing place.`)
+    }
+    if (visit.status !== undefined && !VISIT_STATUSES.has(visit.status)) {
+      errors.push(`${label}: status "${visit.status}" must be one of ${[...VISIT_STATUSES].join(', ')}.`)
     }
     checkOptionalDate(errors, visit, 'startDate', label)
     checkOptionalDate(errors, visit, 'endDate', label)

@@ -8,6 +8,8 @@ import {
   deriveCountryGroups,
   deriveRoutes,
   formatVisitDateRange,
+  isCompletedVisit,
+  latestVisitDate,
   orderVisitsChronologically,
 } from '../domain/viewModel'
 import type { CountryGroup, PlaceRoute } from '../domain/viewModel'
@@ -48,6 +50,8 @@ export type WorldContent = {
   hiddenMediaIdsByPlaceId: Record<PlaceId, MediaId[]>
   visitCountByPlaceId: Record<PlaceId, number>
   dateRangeByPlaceId: Record<PlaceId, string>
+  /** Latest completed-visit boundary date per place, for "最近到访" labels. */
+  latestVisitDateByPlaceId: Record<PlaceId, string | undefined>
 }
 
 export type WorldContentState =
@@ -112,10 +116,20 @@ const loadWorldContent = async (): Promise<WorldContent> => {
     coverByPlaceId,
     hiddenMediaIdsByPlaceId,
     visitCountByPlaceId: Object.fromEntries(
-      Object.entries(visitsByPlaceId).map(([placeId, placeVisits]) => [placeId, placeVisits.length]),
+      // Planned visits are intentions: they never count toward 到访次数.
+      Object.entries(visitsByPlaceId).map(([placeId, placeVisits]) => [
+        placeId,
+        placeVisits.filter(isCompletedVisit).length,
+      ]),
     ),
     dateRangeByPlaceId: Object.fromEntries(
-      places.map((place) => [place.id, formatVisitDateRange(visitsByPlaceId[place.id] ?? [])]),
+      places.map((place) => [
+        place.id,
+        formatVisitDateRange((visitsByPlaceId[place.id] ?? []).filter(isCompletedVisit)),
+      ]),
+    ),
+    latestVisitDateByPlaceId: Object.fromEntries(
+      places.map((place) => [place.id, latestVisitDate(visitsByPlaceId[place.id] ?? [])]),
     ),
   }
 }

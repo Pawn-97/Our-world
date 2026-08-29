@@ -6,6 +6,8 @@ import type {
   Place,
   PlaceId,
   Visit,
+  VisitId,
+  VisitStatus,
 } from './types'
 
 export type CountryGroup = {
@@ -79,8 +81,34 @@ export const orderVisitsChronologically = (visits: Visit[]): Visit[] =>
     `${left.startDate ?? '9999'}:${left.id}`.localeCompare(`${right.startDate ?? '9999'}:${right.id}`),
   )
 
+/** A visit without an explicit status is a completed (past) visit. */
+export const getVisitStatus = (visit: Visit): VisitStatus => visit.status ?? 'completed'
+
+export const isCompletedVisit = (visit: Visit): boolean => getVisitStatus(visit) === 'completed'
+
 export const getVisitsForPlace = (visits: Visit[], placeId: PlaceId): Visit[] =>
   orderVisitsChronologically(visits.filter((visit) => visit.placeId === placeId))
+
+/**
+ * Visit selection for the place detail page: 'all' keeps every visit,
+ * otherwise only the chosen visit survives. Unknown ids fall back to 'all'
+ * so a stale selection never blanks the page.
+ */
+export const selectVisits = (visits: Visit[], selectedVisitId: VisitId | 'all'): Visit[] => {
+  if (selectedVisitId === 'all') return visits
+  const selected = visits.filter((visit) => visit.id === selectedVisitId)
+  return selected.length > 0 ? selected : visits
+}
+
+/** Latest boundary date across completed visits, for "最近到访" labels. */
+export const latestVisitDate = (visits: Visit[]): string | undefined => {
+  const dates = visits
+    .filter(isCompletedVisit)
+    .flatMap((visit) => [visit.startDate, visit.endDate])
+    .filter((date): date is string => Boolean(date))
+    .sort()
+  return dates[dates.length - 1]
+}
 
 const visitBoundaryDates = (visit: Visit): string[] =>
   [visit.startDate, visit.endDate].filter((date): date is string => Boolean(date))
@@ -129,8 +157,12 @@ export const deriveCountryGroups = (places: Place[], visits: Visit[]): CountryGr
   for (const group of groups) {
     group.centerLat = group.places.reduce((sum, place) => sum + place.latitude, 0) / group.places.length
     group.centerLng = group.places.reduce((sum, place) => sum + place.longitude, 0) / group.places.length
+    // Planned visits are intentions, not history: they never count toward a
+    // group's visit total or date range.
     const groupVisits = orderVisitsChronologically(
-      visits.filter((visit) => group.places.some((place) => place.id === visit.placeId)),
+      visits.filter(
+        (visit) => isCompletedVisit(visit) && group.places.some((place) => place.id === visit.placeId),
+      ),
     )
     group.visitCount = groupVisits.length
     group.dateRangeLabel = formatVisitDateRange(groupVisits)
@@ -140,13 +172,14 @@ export const deriveCountryGroups = (places: Place[], visits: Visit[]): CountryGr
 }
 
 /**
- * Globe routes are derived from chronologically ordered visits: every pair of
- * consecutive visits connects their places with an arc. Places without visits
- * never touch an arc; back-to-back visits to the same place collapse.
+ * Globe routes are derived from chronologically ordered *completed* visits:
+ * every pair of consecutive visits connects their places with an arc. Planned
+ * visits are intentions and never draw arcs; places without visits never
+ * touch an arc; back-to-back visits to the same place collapse.
  */
 export const deriveRoutes = (places: Place[], visits: Visit[]): PlaceRoute[] => {
   const groupIdByPlaceId = new Map(places.map((place) => [place.id, countryGroupIdForPlace(place)]))
-  const orderedVisits = orderVisitsChronologically(visits)
+  const orderedVisits = orderVisitsChronologically(visits.filter(isCompletedVisit))
   const routes: PlaceRoute[] = []
 
   for (let index = 1; index < orderedVisits.length; index += 1) {

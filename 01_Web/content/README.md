@@ -11,11 +11,15 @@ of truth for the static build; keep them valid with `npm run validate`.
   `country`, `latitude`, `longitude`, `status`
   (`visited` | `planned` | `wishlist`), `createdAt`, `updatedAt`.
   Optional: `nameEn`, `countryEn`, `countryCode` (ISO 3166-1 alpha-2,
-  lowercase), `region`, `summary`, `coverMediaId`.
+  lowercase), `region`, `summary`, `wishlistReason` (shown on the detail
+  page for wishlist places), `coverMediaId`.
 - `visits.json` — array of visits. Required: `id`, `placeId`, timestamps.
-  Optional: `startDate`, `endDate` (`YYYY-MM-DD` or `YYYY-MM`), `title`,
+  Optional: `status` (`completed` | `planned`; omitted means `completed`),
+  `startDate`, `endDate` (`YYYY-MM-DD` or `YYYY-MM`), `title`,
   `summary`. A place may have many visits; routes on the globe are derived
-  from chronologically ordered visits.
+  from chronologically ordered completed visits — `planned` visits are
+  intentions: they never draw arcs and do not count toward visit totals or
+  date ranges.
 - `memories.json` — array of memories. Required: `id`, `visitId`,
   `type` (`note` | `activity` | `photo`), `mediaIds` (array, may be empty),
   timestamps. Optional: `title`, `body`, `date`, `latitude`, `longitude`,

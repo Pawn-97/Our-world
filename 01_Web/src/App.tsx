@@ -426,7 +426,9 @@ function WorldApp({ content }: { content: WorldContent }) {
         <PlacePreviewSheet
           place={mobilePreviewPlace}
           group={selectedGroup}
-          dateRangeLabel={content.dateRangeByPlaceId[mobilePreviewPlace.id] ?? ''}
+          cover={content.coverByPlaceId[mobilePreviewPlace.id]}
+          visitCount={content.visitCountByPlaceId[mobilePreviewPlace.id] ?? 0}
+          lastVisitDateLabel={content.latestVisitDateByPlaceId[mobilePreviewPlace.id]}
           onClose={closePlacePreview}
           onOpenDetail={openPlaceDetail}
         />

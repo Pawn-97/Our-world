@@ -170,4 +170,37 @@ describe('validateContent', () => {
     const errors = validateContent(content)
     expect(errors.some((error) => error.includes('does not match world id'))).toBe(true)
   })
+
+  it('accepts a planned visit with future dates', () => {
+    const content = validContent()
+    content.visits.push({
+      id: 'visit-tokyo-2026-12',
+      placeId: 'place-tokyo',
+      status: 'planned',
+      startDate: '2026-12-20',
+      endDate: '2026-12-27',
+      ...TIMESTAMPS,
+    })
+    expect(validateContent(content)).toEqual([])
+  })
+
+  it('fails on a bad visit status', () => {
+    const content = validContent()
+    content.visits[0].status = 'cancelled'
+    const errors = validateContent(content)
+    expect(errors.some((error) => error.includes('status "cancelled"'))).toBe(true)
+  })
+
+  it('accepts a wishlist reason on a place', () => {
+    const content = validContent()
+    content.places[0].wishlistReason = '想去看樱花。'
+    expect(validateContent(content)).toEqual([])
+  })
+
+  it('fails on an empty wishlist reason', () => {
+    const content = validContent()
+    content.places[0].wishlistReason = ''
+    const errors = validateContent(content)
+    expect(errors.some((error) => error.includes('wishlistReason'))).toBe(true)
+  })
 })
