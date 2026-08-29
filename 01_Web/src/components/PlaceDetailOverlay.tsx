@@ -8,6 +8,7 @@ import { memoryTypeLabels, placeStatusLabels } from '../domain/types'
 import type { Media, MediaId, Memory, MemoryId, Place, Visit, VisitId } from '../domain/types'
 import { mediaService } from '../services/mediaService'
 import { statusDotStyle } from './placeStatusStyle'
+import { overlayEscapeStack } from './overlayEscapeStack'
 import type { PlacePhotoGalleryRequest } from './PlacePhotoGalleryModal'
 
 type PlaceDetailOverlayProps = {
@@ -106,24 +107,28 @@ export function PlaceDetailOverlay({
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      // Layered dismissal: Escape closes the memory detail first, then the
-      // place overlay.
+  // Latest-handler ref so the stack registration stays stable (re-registering
+  // on every render could reorder this layer above an open lightbox).
+  const escapeHandlerRef = useRef<() => void>(() => undefined)
+  useEffect(() => {
+    // Layered dismissal: Escape closes the memory detail first, then the
+    // place overlay — and only when this overlay is the topmost layer (a
+    // lightbox above it gets Escape first).
+    escapeHandlerRef.current = () => {
       if (selectedMemoryId) {
         setSelectedMemoryId(undefined)
         return
       }
       onClose()
     }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', handleKeyDown)
-    }
   }, [onClose, selectedMemoryId])
+
+  useEffect(() => overlayEscapeStack.register(() => escapeHandlerRef.current()), [])
 
   // One-step add media (dev/local editor only): pick → upload → import → reload.
   const addMedia = async (files: FileList | null) => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Images, Rows3, X } from 'lucide-react'
 import type { Media } from '../domain/types'
 import { mediaService } from '../services/mediaService'
+import { overlayEscapeStack } from './overlayEscapeStack'
 
 export type PlacePhotoGalleryRequest = {
   photos: Media[]
@@ -36,12 +37,12 @@ export function PlacePhotoGalleryModal({
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-        return
-      }
+    // Escape goes through the shared overlay stack so one keypress closes
+    // only this (topmost) layer, leaving the place detail overlay beneath
+    // it open. Arrow-key photo navigation stays local to the lightbox.
+    const unregisterEscape = overlayEscapeStack.register(onClose)
 
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (mode !== 'viewer') return
       if (event.key === 'ArrowLeft') {
         setActiveIndex((current) => (current - 1 + photos.length) % photos.length)
@@ -54,6 +55,7 @@ export function PlacePhotoGalleryModal({
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       document.body.style.overflow = previousOverflow
+      unregisterEscape()
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [mode, onClose, photos.length])
