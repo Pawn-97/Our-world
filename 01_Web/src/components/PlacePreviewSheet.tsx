@@ -35,7 +35,7 @@ export function PlacePreviewSheet({
   return (
     <section
       aria-label={`${place.name} preview`}
-      className="pointer-events-auto fixed inset-x-3 z-40 rounded-3xl border border-white/14 bg-slate-950/82 p-4 text-left shadow-[0_24px_60px_rgba(2,6,23,0.62)] backdrop-blur-2xl"
+      className="place-preview-sheet pointer-events-auto fixed inset-x-3 z-40 rounded-3xl border border-white/14 bg-slate-950/82 p-4 text-left shadow-[0_24px_60px_rgba(2,6,23,0.62)] backdrop-blur-2xl"
       style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
     >
       <div className="flex items-start gap-3">

@@ -40,56 +40,9 @@ button {
   cursor: pointer;
 }
 
-.app-background {
-  background:
-    radial-gradient(circle at 50% 8%, rgba(199, 221, 255, 0.62), transparent 36%),
-    radial-gradient(circle at 50% 62%, rgba(219, 234, 254, 0.58), transparent 42%),
-    linear-gradient(180deg, #ffffff 0%, #eef3f9 54%, #f8fafc 100%);
-  transition: background 420ms ease;
-}
-
-.app-grid {
-  opacity: 0.08;
-  background-image:
-    linear-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
-  background-size: 96px 96px;
-  transition: opacity 420ms ease;
-}
-
-.star-field {
-  opacity: 0;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.88) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 72% 18%, rgba(180, 214, 255, 0.76) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 42% 66%, rgba(255, 255, 255, 0.68) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 84% 74%, rgba(120, 170, 255, 0.6) 0 1px, transparent 1.8px);
-  background-size: 190px 190px, 260px 260px, 230px 230px, 310px 310px;
-  transition: opacity 420ms ease;
-}
-
 .theme-night {
-  background: #020817;
+  background: #000;
   color: #eef6ff;
-}
-
-.theme-night .app-background {
-  background:
-    radial-gradient(circle at 18% 18%, rgba(148, 163, 184, 0.12) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 78% 24%, rgba(255, 255, 255, 0.14) 0 1px, transparent 2px),
-    radial-gradient(circle at 62% 70%, rgba(125, 211, 252, 0.12) 0 1px, transparent 1.8px),
-    radial-gradient(circle at 50% 20%, rgba(37, 99, 235, 0.24), transparent 32%),
-    radial-gradient(circle at 74% 8%, rgba(125, 211, 252, 0.14), transparent 28%),
-    linear-gradient(180deg, #020817 0%, #07111f 52%, #020817 100%);
-  background-size: 240px 240px, 320px 320px, 280px 280px, auto, auto, auto;
-}
-
-.theme-night .app-grid {
-  opacity: 0.08;
-}
-
-.theme-night .star-field {
-  opacity: 1;
 }
 
 .glass-panel {
@@ -170,7 +123,7 @@ button {
 }
 
 .theme-night .cesium-atlas-shell {
-  background: #020817;
+  background: #000;
 }
 
 .cesium-atlas-shell .cesium-viewer,
@@ -3038,3 +2991,152 @@ button {
 /* Release page follows the Journey page's full-screen, star-field-backed
    composition and keeps all updating actions inside one dedicated page. */
 
+
+/* ---------------------------------------------------------------------------
+ * UX-5 immersive chrome overrides (appended last so they win over the legacy
+ * layered rules above at equal specificity):
+ *  - header is a compact floating pill; tagline drops on short screens
+ *  - dock is smaller and more translucent
+ *  - landscape-first phones ((orientation: landscape) and short viewport)
+ *    get floating side drawers, a corner dock, and a side place preview
+ * ------------------------------------------------------------------------- */
+
+.atlas-app-header[data-page='map'],
+.theme-night .atlas-app-header[data-page='map'] {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  background: rgba(3, 5, 9, 0.55);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+.atlas-app-header[data-page='map']::after,
+.atlas-app-header.hero-glass-layer::after {
+  display: none;
+}
+
+/* The overlay frame anchors to the slim header instead of the old banner. */
+.cesium-lab-page {
+  --atlas-overlay-top: 64px;
+}
+
+@media (max-width: 767px) {
+  .cesium-lab-page {
+    --atlas-overlay-top: 52px;
+  }
+
+  .atlas-app-header[data-page='map'] {
+    top: 8px;
+    left: 50vw;
+    width: max-content;
+    max-width: calc(100vw - 24px);
+    padding: 5px 16px;
+  }
+
+  .atlas-app-header[data-page='map'] h1 {
+    font-size: 1rem;
+  }
+}
+
+@media (max-height: 560px) {
+  .atlas-app-header[data-page='map'] .atlas-app-tagline {
+    display: none;
+  }
+}
+
+/* Smaller, more translucent dock. */
+.atlas-map-controls,
+.theme-night .atlas-map-controls {
+  gap: 2px;
+  border-radius: 12px;
+  background: rgba(4, 7, 12, 0.55);
+  padding: 3px;
+}
+
+.atlas-dock-button,
+.atlas-sidebars-toggle.atlas-dock-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 9px;
+}
+
+/* The dual-icon sidebar toggle needs a little more room than a square. */
+.atlas-sidebars-toggle.atlas-dock-button {
+  width: 58px;
+  min-width: 58px;
+}
+
+/* Landscape-first mobile: short wide viewports (phones rotated). The globe
+   stays the protagonist — panels become floating drawers, the dock tucks
+   into the corner, and the place preview docks to the right edge instead of
+   covering the globe center. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .atlas-app-header[data-page='map'] {
+    top: 8px;
+    left: 10px;
+    max-width: 44vw;
+    padding: 4px 14px;
+    transform: none;
+  }
+
+  .atlas-app-header[data-page='map'] h1 {
+    font-size: 0.95rem;
+  }
+
+  .atlas-app-header[data-page='map'] .atlas-app-tagline {
+    display: none;
+  }
+
+  .cesium-lab-page {
+    --atlas-overlay-top: 8px;
+  }
+
+  .cesium-lab-page .atlas-overlay-frame {
+    top: var(--atlas-overlay-top);
+  }
+
+  .cesium-lab-page .atlas-left-panel,
+  .cesium-lab-page .atlas-right-stack {
+    top: 8px;
+    bottom: 8px;
+    height: auto;
+    max-height: calc(100dvh - 16px);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .cesium-lab-page .atlas-left-panel {
+    left: 8px;
+    width: min(280px, 42vw);
+    max-width: 42vw;
+  }
+
+  .cesium-lab-page .atlas-right-stack {
+    right: 8px;
+    width: min(300px, 44vw);
+    max-width: 44vw;
+  }
+
+  .atlas-map-controls {
+    right: 10px;
+    bottom: 10px;
+    left: auto;
+    transform: none;
+  }
+
+  .place-preview-sheet {
+    top: auto !important;
+    right: 10px !important;
+    bottom: 62px !important;
+    left: auto !important;
+    width: min(320px, 46vw);
+    max-height: calc(100dvh - 84px);
+    overflow-y: auto;
+  }
+
+  .place-preview-sheet .line-clamp-3 {
+    -webkit-line-clamp: 2;
+  }
+}

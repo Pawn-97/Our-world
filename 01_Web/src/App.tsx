@@ -318,10 +318,7 @@ function WorldApp({ content, refresh }: { content: WorldContent; refresh: () => 
   const detailPlace = placeDetailOpen ? selectedPlace : undefined
 
   return (
-    <main className="theme-night relative h-[100dvh] overflow-hidden bg-[#010409] text-slate-950">
-      <div className="app-background fixed inset-0 -z-10" />
-      <div className="app-grid fixed inset-0 -z-10" />
-      <div className="star-field fixed inset-0 -z-10" />
+    <main className="theme-night relative h-[100dvh] overflow-hidden bg-black text-slate-950">
       <AtlasHeader />
       <section
         className="atlas-experience cesium-lab-page relative h-[100dvh] w-screen overflow-hidden"

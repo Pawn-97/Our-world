@@ -1,14 +1,13 @@
 import {
   Credit,
-  Ion,
   TileMapServiceImageryProvider,
+  UrlTemplateImageryProvider,
   WebMapTileServiceImageryProvider,
   buildModuleUrl,
-  createWorldImageryAsync,
 } from 'cesium'
 import type { ImageryProvider } from 'cesium'
 
-export type MapSourceId = 'cesium' | 'tianditu' | 'local'
+export type MapSourceId = 'esri' | 'tianditu' | 'local'
 
 export type MapSourceOption = {
   id: MapSourceId
@@ -22,27 +21,25 @@ type MapSourceLayers = {
   labels?: ImageryProvider
 }
 
-const cesiumIonToken = (import.meta.env.VITE_CESIUM_ION_TOKEN ?? '').trim()
+// Esri World Imagery direct REST tiles (UX-2): no token, no Cesium ion, no
+// on-screen badge. Attribution rides in the Cesium credit line / lightbox.
+export const esriImageryUrlTemplate =
+  'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const esriImageryCredit = 'Esri, Maxar, Earthstar Geographics'
+
 const tiandituToken = (import.meta.env.VITE_TIANDITU_TOKEN ?? '').trim()
 
-// Whether a Cesium ion token is available. Gates ion-based extras such as
-// OSM Buildings independently of which imagery source the user picked.
-export const cesiumIonConfigured = Boolean(cesiumIonToken)
 const configuredDefault = (import.meta.env.VITE_MAP_SOURCE ?? 'auto').trim().toLowerCase()
 const mapSourceStorageKey = 'our-world:map-source'
 const tiandituSubdomains = ['0', '1', '2', '3', '4', '5', '6', '7']
 const tiandituTileMatrixLabels = Array.from({ length: 18 }, (_, index) => String(index + 1))
 
-if (cesiumIonToken) {
-  Ion.defaultAccessToken = cesiumIonToken
-}
-
 export const mapSourceOptions: MapSourceOption[] = [
   {
-    id: 'cesium',
-    label: 'Cesium',
-    description: 'Cesium ion 全球影像',
-    configured: Boolean(cesiumIonToken),
+    id: 'esri',
+    label: 'Esri',
+    description: '全球卫星影像（无需 Key）',
+    configured: true,
   },
   {
     id: 'tianditu',
@@ -67,15 +64,16 @@ const isConfiguredMapSource = (value: string | null): value is MapSourceId => (
 )
 
 const automaticMapSource = (): MapSourceId => {
-  if (cesiumIonToken) return 'cesium'
-  if (tiandituToken) return 'tianditu'
-  return 'local'
+  // Esri needs no credential, so it is always the preferred online source.
+  return 'esri'
 }
 
 export const getInitialMapSource = (): MapSourceId => {
   if (typeof window !== 'undefined') {
     try {
       const storedSource = window.localStorage.getItem(mapSourceStorageKey)
+      // A legacy persisted id (e.g. the removed 'cesium' ion source) no longer
+      // passes this check and falls through to the default.
       if (isConfiguredMapSource(storedSource)) return storedSource
     } catch {
       // Storage can be unavailable in privacy-focused browser modes.
@@ -83,7 +81,7 @@ export const getInitialMapSource = (): MapSourceId => {
   }
 
   if (configuredDefault !== 'auto' && isConfiguredMapSource(configuredDefault)) {
-    return configuredDefault
+    return configuredDefault as MapSourceId
   }
 
   return automaticMapSource()
@@ -102,6 +100,12 @@ const createLocalImagery = () => TileMapServiceImageryProvider.fromUrl(
   buildModuleUrl('Assets/Textures/NaturalEarthII'),
 )
 
+const createEsriImagery = () => new UrlTemplateImageryProvider({
+  url: esriImageryUrlTemplate,
+  credit: new Credit(esriImageryCredit),
+  maximumLevel: 19,
+})
+
 const createTiandituImagery = (layer: 'img' | 'cia', includeCredit = false) => (
   new WebMapTileServiceImageryProvider({
     url: `https://t{s}.tianditu.gov.cn/${layer}_w/wmts?tk=${encodeURIComponent(tiandituToken)}`,
@@ -118,15 +122,15 @@ const createTiandituImagery = (layer: 'img' | 'cia', includeCredit = false) => (
 )
 
 export const createMapSourceLayers = (source: MapSourceId): MapSourceLayers => {
-  if (source === 'cesium' && cesiumIonToken) {
-    return { base: createWorldImageryAsync().catch(createLocalImagery) }
-  }
-
   if (source === 'tianditu' && tiandituToken) {
     return {
       base: createTiandituImagery('img', true),
       labels: createTiandituImagery('cia'),
     }
+  }
+
+  if (source === 'esri') {
+    return { base: createEsriImagery() }
   }
 
   return { base: createLocalImagery() }

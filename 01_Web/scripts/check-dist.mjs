@@ -5,7 +5,8 @@
 //   2. the Cesium runtime assets were copied (Assets/Workers/Widgets/
 //      ThirdParty + widgets.css);
 //   3. tracked content media directory is present;
-//   4. no dev-only editor endpoints leaked into the production bundle.
+//   4. no dev-only editor endpoints leaked into the production bundle;
+//   5. no Cesium ion API endpoint string outside the prebuilt cesium/ asset.
 //
 // Usage: node scripts/check-dist.mjs            (expects base '/')
 //        BASE_PATH=/our-world/ node scripts/check-dist.mjs
@@ -89,6 +90,22 @@ try {
     if (!/\.(js|css|html|json|map)$/.test(file)) continue
     if (readFileSync(file, 'utf8').includes('__travelatlas')) {
       fail(`dev-only editor endpoint string found in ${path.relative(distRoot, file)}.`)
+    }
+  }
+} catch (error) {
+  if (errors.length === 0) throw error
+}
+
+// 5. No Cesium ion runtime (UX-2): the app must never reference the ion API
+// endpoint. The prebuilt dist/cesium library asset is exempt — it is copied
+// verbatim and contains the library's internal default URL constant, but no
+// application code path invokes it (no token, baseLayer/geocoder disabled).
+try {
+  for (const file of walk(distRoot)) {
+    if (file.startsWith(path.join(distRoot, 'cesium'))) continue
+    if (!/\.(js|css|html|json|map)$/.test(file)) continue
+    if (readFileSync(file, 'utf8').includes('api.cesium.com')) {
+      fail(`Cesium ion endpoint string found in ${path.relative(distRoot, file)}.`)
     }
   }
 } catch (error) {

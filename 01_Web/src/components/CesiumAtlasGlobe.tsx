@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArcType,
   BoundingSphere,
+  CallbackProperty,
   Cartesian2,
   Cartesian3,
   Cartographic,
-  Cesium3DTileset,
   Color,
   EllipsoidGeodesic,
   HeadingPitchRange,
@@ -21,13 +21,11 @@ import {
   ImageryLayer,
   Scene,
   ScreenSpaceCameraController,
-  SkyBox as CesiumSkyBox,
   SkyAtmosphere,
-  Sun as CesiumSun,
   Viewer,
 } from 'resium'
 import type { CesiumComponentRef } from 'resium'
-import { cesiumIonConfigured, createMapSourceLayers } from '../data/mapSources'
+import { createMapSourceLayers } from '../data/mapSources'
 import type { MapSourceId } from '../data/mapSources'
 import type { PlaceRoute } from '../domain/viewModel'
 import { placeStatusLabels } from '../domain/types'
@@ -39,7 +37,12 @@ import type {
   SelectionMode,
 } from '../domain/types'
 import type { GlobeQualityMode } from '../globeQuality'
-import { CesiumConstellationSky } from './CesiumConstellationSky'
+import {
+  atmosphereShiftForQuality,
+  bloomSettingsForQuality,
+  markerBreathing,
+  markerHaloSizeFor,
+} from './globeAtmosphere'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 const maxCesiumDevicePixelRatio = 2
@@ -99,42 +102,41 @@ const cityMarkerHeight = 600
 const cityPosition = (lng: number, lat: number) =>
   Cartesian3.fromDegrees(lng, lat, cityMarkerHeight)
 
-const cityHoverMarkerImageCache = new Map<string, string>()
+const cityMarkerHaloImageCache = new Map<string, string>()
 
-const cityHoverMarkerImage = (accent: string, corePixelSize: number) => {
-  const cacheKey = `${accent}:${corePixelSize}`
-  const cachedImage = cityHoverMarkerImageCache.get(cacheKey)
+// Soft accent halo behind every place marker (UX-3/4): a radial glow plus a
+// faint ring — the crisp core stays a point primitive on top, so the
+// three-state color semantics (visited/planned/wishlist) are untouched.
+const cityMarkerHaloImage = (accent: string) => {
+  const cachedImage = cityMarkerHaloImageCache.get(accent)
   if (cachedImage) return cachedImage
 
-  const markerPixelSize = 38
-  const coreRadius = corePixelSize * 32 / markerPixelSize
-  const outlineWidth = 2 * 64 / markerPixelSize
   const image = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
       <defs>
-        <radialGradient id="city-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="${accent}" stop-opacity="0.62"/>
-          <stop offset="24%" stop-color="${accent}" stop-opacity="0.44"/>
-          <stop offset="58%" stop-color="${accent}" stop-opacity="0.16"/>
+        <radialGradient id="marker-halo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="${accent}" stop-opacity="0.5"/>
+          <stop offset="34%" stop-color="${accent}" stop-opacity="0.28"/>
+          <stop offset="72%" stop-color="${accent}" stop-opacity="0.08"/>
           <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
         </radialGradient>
       </defs>
-      <circle cx="32" cy="32" r="31" fill="url(#city-glow)"/>
-      <circle
-        cx="32"
-        cy="32"
-        r="${coreRadius}"
-        fill="${accent}"
-        stroke="#ffffff"
-        stroke-opacity="0.94"
-        stroke-width="${outlineWidth}"
-      />
+      <circle cx="32" cy="32" r="31" fill="url(#marker-halo)"/>
+      <circle cx="32" cy="32" r="15" fill="none" stroke="${accent}" stroke-opacity="0.5" stroke-width="1.6"/>
     </svg>
   `)}`
 
-  cityHoverMarkerImageCache.set(cacheKey, image)
+  cityMarkerHaloImageCache.set(accent, image)
   return image
 }
+
+// Selected markers breathe in high quality mode; reduced quality (mobile)
+// keeps a static halo so nothing re-evaluates per frame.
+const breathingHaloSize = (baseSize: number) =>
+  new CallbackProperty(
+    () => baseSize * (1 + markerBreathing.amplitude * Math.sin((performance.now() / markerBreathing.periodMs) * 2 * Math.PI)),
+    false,
+  )
 
 // Status visual language (MVP §3A): visited = solid accent dot, planned =
 // hollow accent ring, wishlist = muted desaturated dot. The same language is
@@ -259,6 +261,24 @@ const configureViewer = (viewer: CesiumViewer, qualityMode: GlobeQualityMode = '
   viewer.scene.globe.depthTestAgainstTerrain = true
   viewer.scene.minimumDisableDepthTestDistance = 0
   viewer.camera.percentageChanged = 0.01
+
+  // UX-3/4 atmosphere: pure-black space with a restrained blue limb glow.
+  // The atmosphere gets a gentle saturation push; bloom runs only in high
+  // quality mode (mobile/reduced keeps it off to protect frame rate).
+  const atmosphereShift = atmosphereShiftForQuality(qualityMode)
+  if (viewer.scene.skyAtmosphere) {
+    viewer.scene.skyAtmosphere.saturationShift = atmosphereShift.saturationShift
+    viewer.scene.skyAtmosphere.brightnessShift = atmosphereShift.brightnessShift
+  }
+  const bloomSettings = bloomSettingsForQuality(qualityMode)
+  const bloom = viewer.scene.postProcessStages.bloom
+  bloom.enabled = bloomSettings.enabled
+  bloom.uniforms.contrast = bloomSettings.contrast
+  bloom.uniforms.brightness = bloomSettings.brightness
+  bloom.uniforms.delta = bloomSettings.delta
+  bloom.uniforms.sigma = bloomSettings.sigma
+  bloom.uniforms.stepSize = bloomSettings.stepSize
+
   viewer.forceResize()
 }
 
@@ -516,41 +536,6 @@ export function CesiumAtlasGlobe({
     if (!viewer) return
 
     configureViewer(viewer, qualityMode)
-  }, [qualityMode, viewerReadyVersion])
-
-  // Cesium OSM Buildings (ion asset 96188) for city/street drill-in.
-  // Loaded once the viewer is ready, in high quality mode, whenever a Cesium
-  // ion token is configured — independent of the chosen imagery source, so a
-  // persisted local/tianditu imagery choice cannot silently disable it.
-  useEffect(() => {
-    if (qualityMode !== 'high' || !cesiumIonConfigured) return undefined
-
-    const viewer = viewerRef.current?.cesiumElement
-    if (!viewer) return undefined
-
-    let cancelled = false
-    let tileset: Cesium3DTileset | undefined
-
-    Cesium3DTileset.fromIonAssetId(96188)
-      .then((loadedTileset) => {
-        if (cancelled || viewer.isDestroyed()) {
-          loadedTileset.destroy()
-          return
-        }
-        tileset = loadedTileset
-        viewer.scene.primitives.add(loadedTileset)
-      })
-      .catch((error: unknown) => {
-        console.warn('[osm-buildings] failed to load ion asset 96188', error)
-      })
-
-    return () => {
-      cancelled = true
-      if (tileset && !viewer.isDestroyed()) {
-        viewer.scene.primitives.remove(tileset)
-        tileset = undefined
-      }
-    }
   }, [qualityMode, viewerReadyVersion])
 
   useEffect(() => {
@@ -828,7 +813,7 @@ export function CesiumAtlasGlobe({
   return (
     <div
       ref={globeShellRef}
-      className={`cesium-atlas-shell absolute inset-0 h-full w-full ${isNight ? 'bg-[#020817]' : 'bg-sky-100'}`}
+      className="cesium-atlas-shell absolute inset-0 h-full w-full bg-black"
       data-focus-offset-x={focusOffset.x}
       data-focus-offset-y={focusOffset.y}
       data-visible-place-count={visiblePlaceIds?.size ?? places.length}
@@ -871,17 +856,16 @@ export function CesiumAtlasGlobe({
             show={showMapContent}
           />
         ) : null}
-        <Scene backgroundColor={Color.fromCssColorString(isNight ? '#010409' : '#dbeafe')} />
+        <Scene backgroundColor={Color.BLACK} />
         <CesiumGlobe
-          baseColor={Color.fromCssColorString(isNight ? '#07111f' : '#cbd5e1')}
+          baseColor={Color.fromCssColorString('#050b16')}
           dynamicAtmosphereLighting={isNight && qualityMode === 'high'}
           enableLighting={isNight && qualityMode === 'high'}
           show={showMapContent}
+          showGroundAtmosphere
           vertexShadowDarkness={isNight ? 0.48 : 0.3}
         />
-        <CesiumSkyBox show={!isNight} />
         <SkyAtmosphere show={showMapContent} />
-        <CesiumSun show={!isNight} />
         <ScreenSpaceCameraController
           enableInputs={showMapContent}
           enableLook={cameraScale !== 'world'}
@@ -891,15 +875,6 @@ export function CesiumAtlasGlobe({
           enableZoom
           inertiaZoom={0.72}
         />
-        <CesiumConstellationSky
-          occludeMoonWithEarth={showMapContent}
-          overviewHeight={cameraScaleStates.world.rangeOrHeight}
-          overviewLat={overviewTarget.lat}
-          overviewLng={overviewTarget.lng}
-          qualityMode={qualityMode}
-          show={isNight}
-        />
-
         {mappedRoutes.map((route) => {
           const isPlaceRoute = activePlaceRouteIds.has(route.id)
           const isCountryRoute =
@@ -951,8 +926,11 @@ export function CesiumAtlasGlobe({
           const isMuted =
             selectionMode !== 'overview' && !isSelected && !isGroupPlace
           const corePixelSize = (isGroupPlace ? 12 : sparseMarkerSet ? 11 : 7) + markerSizeBoost
-          const showHoverGlow = isHoveredGroupPlace && !isSelected
           const markerPoint = markerPointForStatus(place.status, accent, isMuted, isSelected)
+          const haloSize = markerHaloSizeFor(corePixelSize, isSelected) +
+            (isHoveredGroupPlace && !isSelected ? 10 : 0)
+          const breathing = isSelected && qualityMode === 'high'
+          const haloAlpha = isMuted ? 0.1 : isHoveredGroupPlace || isSelected ? 0.9 : 0.55
 
           return (
             <Entity
@@ -961,14 +939,14 @@ export function CesiumAtlasGlobe({
               show={showMapContent && (visiblePlaceIds?.has(place.id) ?? true)}
               position={cityPosition(place.lng, place.lat)}
               onClick={() => onSelectPlace(place.id)}
-              billboard={showHoverGlow ? {
-                color: Color.WHITE,
+              billboard={{
+                color: Color.WHITE.withAlpha(haloAlpha),
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
-                height: 38,
-                image: cityHoverMarkerImage(accent, corePixelSize),
-                width: 38,
-              } : undefined}
-              point={showHoverGlow ? undefined : {
+                height: breathing ? breathingHaloSize(haloSize) : haloSize,
+                image: cityMarkerHaloImage(accent),
+                width: breathing ? breathingHaloSize(haloSize) : haloSize,
+              }}
+              point={{
                 color: markerPoint.color,
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
                 outlineColor: markerPoint.outlineColor,
