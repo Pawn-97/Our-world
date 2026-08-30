@@ -3,7 +3,15 @@
 // bad queries, upstream failures, and timeouts with tagged statuses.
 
 import { describe, expect, it } from 'vitest'
-import { mapNominatimResult, mapNominatimResults, searchNominatim } from './geocode.mjs'
+import {
+  mapNominatimResult,
+  mapNominatimResults,
+  mapPhotonResult,
+  mapPhotonResults,
+  searchGeocode,
+  searchNominatim,
+  searchPhoton,
+} from './geocode.mjs'
 
 const kyotoResult = {
   place_id: 123,
@@ -142,5 +150,191 @@ describe('searchNominatim', () => {
       })
     await expect(searchNominatim('Kyoto', { fetchImpl, timeoutMs: 5 }))
       .rejects.toMatchObject({ status: 504 })
+  })
+})
+
+const kyotoPhotonFeature = {
+  type: 'Feature',
+  geometry: { type: 'Point', coordinates: [135.7681, 35.0116] },
+  properties: {
+    osm_type: 'R',
+    osm_key: 'place',
+    osm_value: 'city',
+    type: 'city',
+    name: '京都市',
+    state: '京都府',
+    country: '日本',
+    countrycode: 'JP',
+  },
+}
+
+describe('mapPhotonResult', () => {
+  it('maps a full Photon feature (GeoJSON [lon, lat] order!)', () => {
+    expect(mapPhotonResult(kyotoPhotonFeature)).toEqual({
+      displayName: '京都市, 京都府, 日本',
+      name: '京都市',
+      nameEn: '',
+      country: '日本',
+      countryCode: 'jp',
+      lat: 35.0116,
+      lon: 135.7681,
+      type: 'place/city',
+      typeLabel: '城市',
+    })
+  })
+
+  it('builds displayName without state when state is missing', () => {
+    const feature = {
+      geometry: { coordinates: [118.6116, 4.4795] },
+      properties: { osm_key: 'place', osm_value: 'town', name: 'Semporna', country: 'Malaysia', countrycode: 'MY' },
+    }
+    const mapped = mapPhotonResult(feature)
+    expect(mapped?.displayName).toBe('Semporna, Malaysia')
+    expect(mapped?.typeLabel).toBe('城镇')
+  })
+
+  it('drops features with missing or out-of-range coordinates', () => {
+    expect(mapPhotonResult({ properties: { name: 'X' } })).toBeUndefined()
+    expect(mapPhotonResult({ geometry: { coordinates: [] }, properties: { name: 'X' } })).toBeUndefined()
+    expect(mapPhotonResult({ geometry: { coordinates: ['abc', 10] }, properties: { name: 'X' } })).toBeUndefined()
+    // lat is coordinates[1]: 95 is out of range even though coordinates[0] is fine.
+    expect(mapPhotonResult({ geometry: { coordinates: [10, 95] }, properties: { name: 'X' } })).toBeUndefined()
+    expect(mapPhotonResult({ geometry: { coordinates: [-200, 10] }, properties: { name: 'X' } })).toBeUndefined()
+  })
+
+  it('drops features without a name', () => {
+    expect(mapPhotonResult({ geometry: { coordinates: [135, 35] }, properties: {} })).toBeUndefined()
+    expect(mapPhotonResult({ geometry: { coordinates: [135, 35] } })).toBeUndefined()
+  })
+
+  it('tolerates missing countrycode and unknown types', () => {
+    const mapped = mapPhotonResult({
+      geometry: { coordinates: [135, 35] },
+      properties: { name: 'X', osm_key: 'natural', osm_value: 'geyser' },
+    })
+    expect(mapped?.countryCode).toBeUndefined()
+    expect(mapped?.country).toBe('')
+    expect(mapped?.type).toBe('natural/geyser')
+    expect(mapped?.typeLabel).toBe('geyser')
+  })
+})
+
+describe('mapPhotonResults', () => {
+  it('maps the FeatureCollection and drops invalid features', () => {
+    const mapped = mapPhotonResults({
+      type: 'FeatureCollection',
+      features: [kyotoPhotonFeature, { properties: {} }, null],
+    })
+    expect(mapped).toHaveLength(1)
+    expect(mapped[0].name).toBe('京都市')
+  })
+
+  it('treats non-FeatureCollection payloads as empty', () => {
+    expect(mapPhotonResults(undefined)).toEqual([])
+    expect(mapPhotonResults([])).toEqual([])
+    expect(mapPhotonResults({ error: 'nope' })).toEqual([])
+  })
+})
+
+describe('searchPhoton', () => {
+  const jsonResponse = (body, status = 200) =>
+    ({ ok: status >= 200 && status < 300, status, json: async () => body })
+
+  it('passes the query with an identifiable User-Agent, without a lang param', async () => {
+    let seenUrl
+    let seenHeaders
+    const fetchImpl = async (url, options) => {
+      seenUrl = url
+      seenHeaders = options.headers
+      return jsonResponse({ type: 'FeatureCollection', features: [kyotoPhotonFeature] })
+    }
+    const results = await searchPhoton('Kyoto', { fetchImpl })
+    expect(results).toHaveLength(1)
+    expect(seenUrl).toContain('photon.komoot.io/api/')
+    expect(seenUrl).toContain('q=Kyoto')
+    expect(seenUrl).not.toContain('lang=')
+    expect(seenHeaders['user-agent']).toContain('OurWorld-LocalEditor')
+  })
+})
+
+describe('searchGeocode (photon-first fallback chain)', () => {
+  const jsonResponse = (body, status = 200) =>
+    ({ ok: status >= 200 && status < 300, status, json: async () => body })
+
+  const byUrl = (handlers) => async (url, options) => {
+    const handler = url.includes('photon.komoot.io') ? handlers.photon : handlers.nominatim
+    return handler(url, options)
+  }
+
+  it('uses Photon when it succeeds and never calls Nominatim', async () => {
+    let nominatimCalled = false
+    const fetchImpl = byUrl({
+      photon: async () => jsonResponse({ type: 'FeatureCollection', features: [kyotoPhotonFeature] }),
+      nominatim: async () => { nominatimCalled = true; return jsonResponse([]) },
+    })
+    const envelope = await searchGeocode('Kyoto', { fetchImpl })
+    expect(envelope.provider).toBe('photon')
+    expect(envelope.results).toHaveLength(1)
+    expect(nominatimCalled).toBe(false)
+  })
+
+  it('an empty Photon result set is a legitimate answer, not a failure', async () => {
+    let nominatimCalled = false
+    const fetchImpl = byUrl({
+      photon: async () => jsonResponse({ type: 'FeatureCollection', features: [] }),
+      nominatim: async () => { nominatimCalled = true; return jsonResponse([kyotoResult]) },
+    })
+    const envelope = await searchGeocode('Zzz', { fetchImpl })
+    expect(envelope.provider).toBe('photon')
+    expect(envelope.results).toEqual([])
+    expect(nominatimCalled).toBe(false)
+  })
+
+  it('falls back to Nominatim when Photon fails (network error)', async () => {
+    const fetchImpl = byUrl({
+      photon: async () => { throw new TypeError('fetch failed') },
+      nominatim: async () => jsonResponse([kyotoResult]),
+    })
+    const envelope = await searchGeocode('Kyoto', { fetchImpl })
+    expect(envelope.provider).toBe('nominatim')
+    expect(envelope.results[0]?.name).toBe('京都')
+  })
+
+  it('falls back to Nominatim when Photon returns a 5xx', async () => {
+    const fetchImpl = byUrl({
+      photon: async () => jsonResponse({}, 503),
+      nominatim: async () => jsonResponse([kyotoResult]),
+    })
+    const envelope = await searchGeocode('Kyoto', { fetchImpl })
+    expect(envelope.provider).toBe('nominatim')
+  })
+
+  it('propagates the Nominatim error status when both providers fail', async () => {
+    const bothDown = byUrl({
+      photon: async () => { throw new TypeError('fetch failed') },
+      nominatim: async () => { throw new TypeError('fetch failed') },
+    })
+    await expect(searchGeocode('Kyoto', { fetchImpl: bothDown })).rejects.toMatchObject({ status: 502 })
+
+    const photonDownNominatimSlow = byUrl({
+      photon: async () => { throw new TypeError('fetch failed') },
+      nominatim: async (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const error = new Error('aborted')
+            error.name = 'AbortError'
+            reject(error)
+          })
+        }),
+    })
+    await expect(searchGeocode('Kyoto', { fetchImpl: photonDownNominatimSlow, timeoutMs: 5 }))
+      .rejects.toMatchObject({ status: 504 })
+  })
+
+  it('rejects short queries before calling any provider', async () => {
+    let called = false
+    const fetchImpl = async () => { called = true; return jsonResponse([]) }
+    await expect(searchGeocode('京', { fetchImpl })).rejects.toMatchObject({ status: 400 })
+    expect(called).toBe(false)
   })
 })
