@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import { localContentStore } from './content-store.mjs'
+import { searchNominatim } from './geocode.mjs'
 
 // Loopback-only Vite middleware for the local editor (dev server only; the
 // production build has no write APIs). Milestone 2 removed the old
@@ -442,9 +443,24 @@ export function travelAtlasLocalEditor() {
           }
           return
         }
-        if (!url.pathname.startsWith('/__travelatlas/editor/')) return next()
+        if (!url.pathname.startsWith('/__travelatlas/editor/') && !url.pathname.startsWith('/__travelatlas/geocode/')) return next()
 
         try {
+          // Geocoding proxy for the search-first add-place flow (UX-1): the
+          // dev server calls Nominatim server-side so the browser never does
+          // (controlled User-Agent, no CORS). Read-only, loopback only, and
+          // absent from the production build like every other editor route.
+          if (request.method === 'GET' && url.pathname === '/__travelatlas/geocode/search') {
+            if (!isLoopbackRequest(request)) return sendJson(response, 403, { ok: false, error: '仅允许本机编辑会话使用地理搜索。' })
+            try {
+              const results = await searchNominatim(url.searchParams.get('q') ?? '')
+              return sendJson(response, 200, { ok: true, results })
+            } catch (error) {
+              const status = typeof error?.status === 'number' ? error.status : 502
+              return sendJson(response, status, { ok: false, error: error instanceof Error ? error.message : '地理搜索失败。' })
+            }
+          }
+
           if (request.method === 'GET' && url.pathname === '/__travelatlas/editor/state') {
             if (!isLoopbackRequest(request)) return sendJson(response, 403, { ok: false, error: '仅允许本机编辑会话读取。' })
             const state = normalizeState(await readJson(editorStatePath, emptyState))

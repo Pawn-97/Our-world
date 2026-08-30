@@ -62,6 +62,18 @@ describe('validatePlaceDraft', () => {
   it('rejects a malformed country code', () => {
     expect(validatePlaceDraft(placeDraft({ countryCode: 'JPN' }))).toContain('国家代码须为两位小写字母（如 jp）。')
   })
+
+  it('accepts a search-flow draft with summary and optional fields left empty (UX-1)', () => {
+    // The search-first flow auto-fills name/country/coordinates from a
+    // geocode result; summary, nameEn, countryEn, region are all optional.
+    expect(validatePlaceDraft(placeDraft({
+      nameEn: '',
+      countryEn: '',
+      countryCode: '',
+      summary: '',
+      wishlistReason: '',
+    }))).toEqual([])
+  })
 })
 
 describe('validateVisitDraft', () => {
