@@ -80,42 +80,6 @@ button {
   border-color: rgba(148, 163, 184, 0.2);
 }
 
-.hero-glass-layer {
-  border: 1px solid rgba(255, 255, 255, 0.56);
-  border-radius: 36px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.28)),
-    radial-gradient(circle at 50% 100%, rgba(191, 219, 254, 0.3), transparent 58%);
-  box-shadow: 0 26px 90px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(20px) saturate(1.18);
-}
-
-.theme-night .hero-glass-layer {
-  border-color: rgba(148, 163, 184, 0.22);
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.68), rgba(15, 23, 42, 0.36)),
-    radial-gradient(circle at 50% 100%, rgba(56, 189, 248, 0.2), transparent 58%);
-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.34);
-}
-
-.theme-night .hero-glass-layer :is(h1, p) {
-  color: #eef6ff;
-}
-
-.theme-night .hero-glass-layer p {
-  color: rgba(203, 213, 225, 0.76);
-}
-
-.hero-glass-layer::after {
-  position: absolute;
-  inset: auto 8% -18px;
-  height: 46px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent);
-  content: '';
-  pointer-events: none;
-}
-
 .cesium-atlas-shell {
   --cursor-x: 50%;
   --cursor-y: 50%;
@@ -156,17 +120,6 @@ button {
   display: none !important;
 }
 
-.cesium-lab-page .hero-glass-layer {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.22)),
-    radial-gradient(circle at 50% 100%, rgba(191, 219, 254, 0.24), transparent 58%);
-  backdrop-filter: blur(24px) saturate(1.2);
-}
-
-.cesium-lab-title::after {
-  display: none;
-}
-
 .cesium-lab-page .glass-panel {
   background: rgba(255, 255, 255, 0.52);
   backdrop-filter: blur(30px) saturate(1.16);
@@ -184,7 +137,7 @@ button {
 }
 
 .cesium-lab-page {
-  --atlas-overlay-top: 190px;
+  --atlas-overlay-top: 12px;
   --atlas-panel-top: 12px;
   --atlas-panel-bottom: clamp(24px, 2.2dvh, 32px);
 }
@@ -242,12 +195,6 @@ button {
     height: calc(100dvh - var(--atlas-overlay-top) - var(--atlas-panel-top) - var(--atlas-panel-bottom));
     max-height: calc(100dvh - var(--atlas-overlay-top) - var(--atlas-panel-top) - var(--atlas-panel-bottom));
   }
-}
-
-.theme-night .cesium-lab-page .hero-glass-layer {
-  background:
-    linear-gradient(180deg, rgba(8, 17, 34, 0.58), rgba(8, 17, 34, 0.3)),
-    radial-gradient(circle at 50% 100%, rgba(56, 189, 248, 0.16), transparent 58%);
 }
 
 .theme-night .cesium-lab-page .glass-panel {
@@ -401,62 +348,8 @@ button {
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.25);
 }
 
-/* Map workspace: flatter instrument-panel treatment based on the approved direction. */
-.atlas-app-header[data-page='map'] {
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 132px;
-  translate: 0 0;
-  transform: none;
-  border: 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 0;
-  background: rgba(5, 14, 26, 0.72);
-  box-shadow:
-    inset 0 -1px 0 rgba(255, 255, 255, 0.035),
-    0 16px 42px rgba(2, 6, 23, 0.2);
-  padding: 9px 24px 10px;
-  backdrop-filter: blur(26px) saturate(1.14);
-}
-
-.atlas-app-header[data-page='map']::after {
-  display: none;
-}
-
-.atlas-app-header[data-page='map'] h1 {
-  color: #f8fafc;
-  font-size: clamp(2rem, 2.6vw, 2.4rem);
-  font-weight: 560;
-  line-height: 1.05;
-  text-shadow: 0 2px 24px rgba(2, 6, 23, 0.58);
-}
-
-.atlas-app-header[data-page='map'] p {
-  margin-top: 4px;
-  color: rgba(226, 232, 240, 0.74);
-  font-size: 13px;
-  line-height: 1.4;
-  text-shadow: 0 1px 14px rgba(2, 6, 23, 0.72);
-}
-
-.theme-night .atlas-app-header[data-page='map'] h1 {
-  color: #f8fafc;
-  text-shadow: 0 2px 28px rgba(125, 211, 252, 0.16);
-}
-
-.theme-night .atlas-app-header[data-page='map'] p {
-  color: rgba(203, 213, 225, 0.7);
-  text-shadow: none;
-}
-
-.theme-night .atlas-app-header[data-page='map'] {
-  border-color: rgba(148, 163, 184, 0.28);
-  background: rgba(3, 9, 18, 0.84);
-}
-
 .cesium-lab-page {
-  --atlas-overlay-top: 132px;
+  --atlas-overlay-top: 12px;
   --atlas-panel-top: 0px;
   --atlas-panel-bottom: 0px;
   --atlas-left-drawer-width: min(330px, calc(50vw - 8px));
@@ -947,25 +840,8 @@ button {
 }
 
 @media (max-width: 767px) {
-  .atlas-app-header[data-page='map'] {
-    top: 0;
-    left: 0;
-    width: 100vw;
-    padding: 8px 12px 9px;
-  }
-
-  .atlas-app-header[data-page='map'] h1 {
-    font-size: 2rem;
-  }
-
-  .atlas-app-header[data-page='map'] p {
-    font-size: 11px;
-  }
-
-  
-
   .cesium-lab-page {
-    --atlas-overlay-top: 132px;
+    --atlas-overlay-top: 8px;
   }
 
   .cesium-lab-page .atlas-overlay-frame {
@@ -1032,47 +908,6 @@ button {
 }
 
 /* Frontier map chrome: cinematic canvas, precision surfaces, restrained ice-blue focus. */
-.atlas-app-header[data-page='map'] {
-  border-bottom-color: rgba(255, 255, 255, 0.1);
-  background: rgba(4, 7, 12, 0.91);
-  box-shadow: inset 0 -1px 0 rgba(125, 211, 252, 0.08);
-  color: #f4f7fa;
-  backdrop-filter: blur(28px) saturate(1.06);
-  font-feature-settings: 'calt', 'kern', 'liga', 'ss03';
-}
-
-.atlas-app-header[data-page='map']::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  display: block;
-  height: 1px;
-  background: rgba(125, 211, 252, 0.26);
-  box-shadow: 0 0 18px rgba(87, 193, 255, 0.16);
-  content: '';
-}
-
-.atlas-app-header[data-page='map'] h1,
-.theme-night .atlas-app-header[data-page='map'] h1 {
-  color: #f4f7fa;
-  font-weight: 580;
-  letter-spacing: -0.045em;
-  text-shadow: none;
-}
-
-.atlas-app-header[data-page='map'] p,
-.theme-night .atlas-app-header[data-page='map'] p {
-  color: rgba(205, 213, 222, 0.68);
-  letter-spacing: 0.015em;
-  text-shadow: none;
-}
-
-.theme-night .atlas-app-header[data-page='map'] {
-  border-bottom-color: rgba(255, 255, 255, 0.1);
-  background: rgba(3, 5, 9, 0.94);
-}
-
 .cesium-lab-page {
   --atlas-ui-canvas: rgba(4, 7, 12, 0.9);
   --atlas-ui-surface-1: rgba(11, 15, 21, 0.92);
@@ -1374,48 +1209,6 @@ button {
 /* Day-mode liquid glass. The map remains the visual protagonist while the
    chrome carries only enough frost and edge light to stay legible. */
 
-.theme-day .atlas-app-header[data-page='map'] {
-  isolation: isolate;
-  overflow: hidden;
-  border-bottom-color: rgba(255, 255, 255, 0.62);
-  background:
-    radial-gradient(ellipse at 50% -28%, rgba(255, 255, 255, 0.72), rgba(236, 247, 255, 0.4) 48%, rgba(188, 216, 234, 0.28) 100%),
-    rgba(228, 241, 250, 0.22);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    inset 0 -1px 0 rgba(14, 165, 233, 0.14),
-    0 18px 48px rgba(15, 23, 42, 0.1);
-  color: #0b1220;
-  -webkit-backdrop-filter: blur(38px) saturate(1.6) contrast(1.04);
-  backdrop-filter: blur(38px) saturate(1.6) contrast(1.04);
-}
-
-.theme-day .atlas-app-header[data-page='map']::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(circle at 22% -40%, rgba(255, 255, 255, 0.72), transparent 44%),
-    linear-gradient(96deg, transparent 24%, rgba(255, 255, 255, 0.18) 48%, transparent 72%);
-  content: '';
-  pointer-events: none;
-}
-
-.theme-day .atlas-app-header[data-page='map']::after {
-  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.7) 50%, transparent);
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.22);
-}
-
-.theme-day .atlas-app-header[data-page='map'] h1 {
-  color: #07111f;
-  font-weight: 600;
-  letter-spacing: -0.05em;
-}
-
-.theme-day .atlas-app-header[data-page='map'] p {
-  color: rgba(30, 41, 59, 0.64);
-}
-
 .theme-day .cesium-lab-page {
   --atlas-ui-canvas: rgba(228, 241, 251, 0.28);
   --atlas-ui-surface-1: rgba(248, 252, 255, 0.34);
@@ -1607,40 +1400,6 @@ button {
 
 /* Celestial glass trial: preserve the docked geometry while allowing the
    moving sky to remain visible through a controlled hierarchy of frost. */
-.theme-night .atlas-app-header[data-page='map'] {
-  isolation: isolate;
-  overflow: hidden;
-  border-bottom-color: transparent;
-  background:
-    linear-gradient(112deg, rgba(125, 211, 252, 0.065), transparent 32%, rgba(167, 139, 250, 0.045) 68%, transparent),
-    rgba(2, 7, 14, 0.28);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 16px 48px rgba(0, 0, 0, 0.14);
-  -webkit-backdrop-filter: blur(34px) saturate(1.5) brightness(0.9);
-  backdrop-filter: blur(34px) saturate(1.5) brightness(0.9);
-}
-
-.theme-night .atlas-app-header[data-page='map']::before {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background:
-    radial-gradient(ellipse at 24% -70%, rgba(255, 255, 255, 0.16), transparent 48%),
-    linear-gradient(100deg, transparent 18%, rgba(186, 230, 253, 0.045) 48%, transparent 78%);
-  content: '';
-  pointer-events: none;
-}
-
-.theme-night .atlas-app-header[data-page='map']::after {
-  display: none;
-}
-
-.theme-night .atlas-app-header[data-page='map'] > * {
-  position: relative;
-  z-index: 1;
-}
-
 .theme-night .cesium-lab-page .atlas-left-panel {
   border-right-color: rgba(186, 230, 253, 0.16);
   background: rgba(2, 7, 14, 0.24);
@@ -1695,22 +1454,6 @@ button {
   backdrop-filter: none;
 }
 
-.theme-day .atlas-app-header[data-page='map'] {
-  border-bottom-color: transparent;
-  background:
-    radial-gradient(ellipse at 50% -35%, rgba(255, 255, 255, 0.52), rgba(224, 241, 252, 0.18) 58%, rgba(191, 222, 241, 0.12)),
-    rgba(232, 245, 252, 0.18);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 16px 48px rgba(66, 105, 129, 0.1);
-  -webkit-backdrop-filter: blur(34px) saturate(1.55) brightness(1.04);
-  backdrop-filter: blur(34px) saturate(1.55) brightness(1.04);
-}
-
-.theme-day .atlas-app-header[data-page='map']::after {
-  display: none;
-}
-
 .theme-day .cesium-lab-page .atlas-left-panel,
 .theme-day .cesium-lab-page .atlas-right-stack {
   background: rgba(236, 247, 253, 0.34);
@@ -1730,29 +1473,6 @@ button {
   background: rgba(255, 255, 255, 0.56);
   -webkit-backdrop-filter: blur(20px) saturate(1.45);
   backdrop-filter: blur(20px) saturate(1.45);
-}
-
-/* Header without a container: keep only the title, supporting copy, and tabs
-   above the continuous Cesium sky. */
-.atlas-app-header[data-page='map'],
-.theme-day .atlas-app-header[data-page='map'],
-.theme-night .atlas-app-header[data-page='map'] {
-  overflow: visible;
-  translate: 0 24px;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-.atlas-app-header[data-page='map']::before,
-.atlas-app-header[data-page='map']::after,
-.theme-day .atlas-app-header[data-page='map']::before,
-.theme-day .atlas-app-header[data-page='map']::after,
-.theme-night .atlas-app-header[data-page='map']::before,
-.theme-night .atlas-app-header[data-page='map']::after {
-  display: none;
 }
 
 /* Continue only the sidebar base surfaces into the former header band. The
@@ -3002,52 +2722,20 @@ button {
 /* ---------------------------------------------------------------------------
  * UX-5 immersive chrome overrides (appended last so they win over the legacy
  * layered rules above at equal specificity):
- *  - header is a compact floating pill; tagline drops on short screens
+ *  - the map page has no header banner — the globe owns the whole viewport
  *  - dock is smaller and more translucent
  *  - landscape-first phones ((orientation: landscape) and short viewport)
  *    get floating side drawers, a corner dock, and a side place preview
  * ------------------------------------------------------------------------- */
 
-.atlas-app-header[data-page='map'],
-.theme-night .atlas-app-header[data-page='map'] {
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 999px;
-  background: rgba(3, 5, 9, 0.55);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(14px) saturate(1.1);
-}
-
-.atlas-app-header[data-page='map']::after,
-.atlas-app-header.hero-glass-layer::after {
-  display: none;
-}
-
-/* The overlay frame anchors to the slim header instead of the old banner. */
+/* The overlay frame hugs the viewport edge now that there is no header. */
 .cesium-lab-page {
-  --atlas-overlay-top: 64px;
+  --atlas-overlay-top: 12px;
 }
 
 @media (max-width: 767px) {
   .cesium-lab-page {
-    --atlas-overlay-top: 52px;
-  }
-
-  .atlas-app-header[data-page='map'] {
-    top: 8px;
-    left: 50vw;
-    width: max-content;
-    max-width: calc(100vw - 24px);
-    padding: 5px 16px;
-  }
-
-  .atlas-app-header[data-page='map'] h1 {
-    font-size: 1rem;
-  }
-}
-
-@media (max-height: 560px) {
-  .atlas-app-header[data-page='map'] .atlas-app-tagline {
-    display: none;
+    --atlas-overlay-top: 8px;
   }
 }
 
@@ -3079,34 +2767,6 @@ button {
    into the corner, and the place preview docks to the right edge instead of
    covering the globe center. */
 @media (orientation: landscape) and (max-height: 520px) {
-  /* True inline pill: the desktop banner rule (width: 100vw; height: 132px)
-     and the floating-pill offset (translate: 0 24px) both still apply here —
-     without these resets the header renders as a giant dark blob that
-     swallows half of the left drawer on short landscape screens. */
-  .atlas-app-header[data-page='map'],
-  .theme-night .atlas-app-header[data-page='map'] {
-    top: 8px;
-    left: 10px;
-    display: inline-flex;
-    width: max-content;
-    max-width: 44vw;
-    height: auto;
-    align-items: center;
-    padding: 6px 12px;
-    translate: 0 0;
-    transform: none;
-    -webkit-backdrop-filter: blur(10px) saturate(1.1);
-    backdrop-filter: blur(10px) saturate(1.1);
-  }
-
-  .atlas-app-header[data-page='map'] h1 {
-    font-size: 0.95rem;
-  }
-
-  .atlas-app-header[data-page='map'] .atlas-app-tagline {
-    display: none;
-  }
-
   .cesium-lab-page {
     --atlas-overlay-top: 8px;
   }

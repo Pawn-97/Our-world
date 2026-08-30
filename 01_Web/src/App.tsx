@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, RotateCcw } from 'lucide-react'
 import { useWorldContent } from './app/useWorldContent'
 import type { WorldContent } from './app/useWorldContent'
-import { AtlasHeader } from './components/AtlasHeader'
 import { CesiumAtlasGlobe } from './components/CesiumAtlasGlobe'
 import type { GlobePlace, GlobeRoute } from './components/CesiumAtlasGlobe'
 import { CountrySelector } from './components/CountrySelector'
@@ -319,7 +318,6 @@ function WorldApp({ content, refresh }: { content: WorldContent; refresh: () => 
 
   return (
     <main className="theme-night relative h-[100dvh] overflow-hidden bg-black text-slate-950">
-      <AtlasHeader />
       <section
         className="atlas-experience cesium-lab-page relative h-[100dvh] w-screen overflow-hidden"
         data-page="map"
