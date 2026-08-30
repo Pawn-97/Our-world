@@ -75,7 +75,9 @@ try {
   fail('dist/media/content missing — tracked content media was not published.')
 }
 
-// 4. Dev-only editor endpoints must not exist anywhere in the bundle.
+// 4. Dev-only editor endpoints and debug handles must not exist anywhere in
+// the bundle. `__ourWorldViewer` is the DEV-only window handle for browser
+// QA scripts; the import.meta.env.DEV guard must have tree-shaken it away.
 const walk = (dir) => {
   const files = []
   for (const entry of readdirSync(dir)) {
@@ -88,8 +90,12 @@ const walk = (dir) => {
 try {
   for (const file of walk(distRoot)) {
     if (!/\.(js|css|html|json|map)$/.test(file)) continue
-    if (readFileSync(file, 'utf8').includes('__travelatlas')) {
+    const text = readFileSync(file, 'utf8')
+    if (text.includes('__travelatlas')) {
       fail(`dev-only editor endpoint string found in ${path.relative(distRoot, file)}.`)
+    }
+    if (text.includes('__ourWorldViewer')) {
+      fail(`dev-only viewer debug handle found in ${path.relative(distRoot, file)}.`)
     }
   }
 } catch (error) {

@@ -430,6 +430,21 @@ export function CesiumAtlasGlobe({
     [],
   )
 
+  // Every viewer access goes through this guard: Cesium getters (viewer.scene,
+  // viewer.camera, …) throw once the widget is destroyed, which can happen
+  // while async callbacks (flyTo completion, render listeners, effect
+  // re-runs during a remount) still hold a stale reference. The try/catch
+  // also covers resium's cesiumElement getter itself misbehaving during
+  // teardown.
+  const liveViewer = useCallback((): CesiumViewer | undefined => {
+    try {
+      const viewer = viewerRef.current?.cesiumElement
+      return viewer && !viewer.isDestroyed() ? viewer : undefined
+    } catch {
+      return undefined
+    }
+  }, [])
+
   // Sparse datasets (e.g. the 3-place spike) keep every marker labeled
   // (subject to the camera-height declutter above) and slightly larger so
   // places read clearly at country scale and below.
@@ -545,7 +560,7 @@ export function CesiumAtlasGlobe({
   ])
 
   const executeCameraCommand = useCallback<ExecuteCameraCommand>((request) => {
-    const viewer = viewerRef.current?.cesiumElement
+    const viewer = liveViewer()
     if (!viewer) return false
 
     const cameraCommandNumber = cameraCommandCountRef.current + 1
@@ -558,19 +573,27 @@ export function CesiumAtlasGlobe({
     viewer.camera.cancelFlight()
     request.run(viewer)
     return true
-  }, [])
+  }, [liveViewer])
 
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement
+    const viewer = liveViewer()
     if (!viewer) return
 
     configureViewer(viewer, qualityMode)
-  }, [qualityMode, viewerReadyVersion])
+
+    // DEV-only debug handle: browser QA scripts drive the camera directly
+    // (e.g. viewer.camera.setView for label-collision verification). The
+    // import.meta.env.DEV guard is statically replaced, so production
+    // bundles contain neither the assignment nor the string.
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __ourWorldViewer?: CesiumViewer }).__ourWorldViewer = viewer
+    }
+  }, [qualityMode, viewerReadyVersion, liveViewer])
 
   useEffect(() => {
     if (cameraScale !== 'world') return undefined
 
-    const viewer = viewerRef.current?.cesiumElement
+    const viewer = liveViewer()
     if (!viewer) return undefined
 
     const lockedPosition = new Cartesian3()
@@ -628,13 +651,17 @@ export function CesiumAtlasGlobe({
         viewer.scene.preRender.removeEventListener(lockWorldCenter)
       }
     }
-  }, [cameraScale, viewerReadyVersion])
+  }, [cameraScale, viewerReadyVersion, liveViewer])
 
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement
+    const viewer = liveViewer()
     if (!viewer) return
 
     const updateVisibleHemisphere = () => {
+      // The widget may be destroyed while listeners are still attached
+      // (remount / quality-mode re-init); Cesium getters throw after
+      // destroy, so bail out first.
+      if (viewer.isDestroyed()) return
       const cameraPosition = viewer.camera.positionWC
       const cameraHeight = viewer.camera.positionCartographic.height
       const nextLabelsHidden = labelsHiddenByHeightRef.current
@@ -726,6 +753,7 @@ export function CesiumAtlasGlobe({
     updateVisibleHemisphereRef.current = updateVisibleHemisphere
     updateVisibleHemisphere()
     const updateAfterFirstRender = () => {
+      if (viewer.isDestroyed()) return
       updateVisibleHemisphere()
       viewer.scene.postRender.removeEventListener(updateAfterFirstRender)
     }
@@ -734,6 +762,7 @@ export function CesiumAtlasGlobe({
     // back-side labels never linger mid-drag.
     let lastMotionCullAt = 0
     const cullDuringCameraMotion = () => {
+      if (viewer.isDestroyed()) return
       const now = performance.now()
       if (now - lastMotionCullAt < 250) return
       lastMotionCullAt = now
@@ -745,13 +774,15 @@ export function CesiumAtlasGlobe({
     viewer.camera.moveEnd.addEventListener(updateVisibleHemisphere)
 
     return () => {
-      viewer.scene.postRender.removeEventListener(updateAfterFirstRender)
-      viewer.scene.preRender.removeEventListener(cullDuringCameraMotion)
-      viewer.camera.changed.removeEventListener(updateVisibleHemisphere)
-      viewer.camera.moveEnd.removeEventListener(updateVisibleHemisphere)
+      if (!viewer.isDestroyed()) {
+        viewer.scene.postRender.removeEventListener(updateAfterFirstRender)
+        viewer.scene.preRender.removeEventListener(cullDuringCameraMotion)
+        viewer.camera.changed.removeEventListener(updateVisibleHemisphere)
+        viewer.camera.moveEnd.removeEventListener(updateVisibleHemisphere)
+      }
       updateVisibleHemisphereRef.current = () => undefined
     }
-  }, [places, mappedRoutes, sparseMarkerSet, viewerReadyVersion])
+  }, [places, mappedRoutes, sparseMarkerSet, viewerReadyVersion, liveViewer])
 
   // Selection changes alter label eligibility and priority (selected and
   // hovered-group labels always show), so re-run the declutter pass even
@@ -761,7 +792,7 @@ export function CesiumAtlasGlobe({
   }, [selectedPlaceId, hoveredCountryGroupId, selectedCountryGroupId])
 
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement
+    const viewer = liveViewer()
     if (!viewer) return
     if (lastCameraFocusKeyRef.current === cameraFocusKey) return
 
@@ -793,6 +824,10 @@ export function CesiumAtlasGlobe({
       globeScale,
     })
     const updateFocusOffset = () => {
+      // flyTo completion can fire after the widget was destroyed (remount
+      // mid-flight); viewer.scene would throw, so bail out first.
+      if (viewer.isDestroyed()) return
+
       const screenPosition = SceneTransforms.worldToWindowCoordinates(
         viewer.scene,
         targetPosition,
@@ -900,6 +935,7 @@ export function CesiumAtlasGlobe({
   }, [
     cameraFocusKey,
     executeCameraCommand,
+    liveViewer,
     viewerReadyVersion,
   ])
 
@@ -953,8 +989,6 @@ export function CesiumAtlasGlobe({
         <Scene backgroundColor={Color.BLACK} />
         <CesiumGlobe
           baseColor={Color.fromCssColorString('#050b16')}
-          dynamicAtmosphereLighting={isNight && qualityMode === 'high'}
-          enableLighting={isNight && qualityMode === 'high'}
           show={showMapContent}
           vertexShadowDarkness={isNight ? 0.48 : 0.3}
         />
