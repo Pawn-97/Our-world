@@ -3079,12 +3079,24 @@ button {
    into the corner, and the place preview docks to the right edge instead of
    covering the globe center. */
 @media (orientation: landscape) and (max-height: 520px) {
-  .atlas-app-header[data-page='map'] {
+  /* True inline pill: the desktop banner rule (width: 100vw; height: 132px)
+     and the floating-pill offset (translate: 0 24px) both still apply here —
+     without these resets the header renders as a giant dark blob that
+     swallows half of the left drawer on short landscape screens. */
+  .atlas-app-header[data-page='map'],
+  .theme-night .atlas-app-header[data-page='map'] {
     top: 8px;
     left: 10px;
+    display: inline-flex;
+    width: max-content;
     max-width: 44vw;
-    padding: 4px 14px;
+    height: auto;
+    align-items: center;
+    padding: 6px 12px;
+    translate: 0 0;
     transform: none;
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    backdrop-filter: blur(10px) saturate(1.1);
   }
 
   .atlas-app-header[data-page='map'] h1 {

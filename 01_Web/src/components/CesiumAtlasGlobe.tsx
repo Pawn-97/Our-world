@@ -271,10 +271,13 @@ const configureViewer = (viewer: CesiumViewer, qualityMode: GlobeQualityMode = '
   viewer.camera.percentageChanged = 0.01
 
   // UX-3/4 atmosphere: pure-black space with a restrained blue limb glow.
-  // Field testing showed the extra skyAtmosphere saturation/brightness shift
-  // pushed the oceans into electric blue, so the limb now keeps Cesium's
-  // physical defaults; bloom runs only in high quality mode (mobile/reduced
+  // The default skyBox starfield is disabled via the Viewer's skyBox={false}
+  // prop; the sun/moon billboards have no constructor switch, so hide them
+  // here. SkyAtmosphere is an independent scene primitive — the limb glow
+  // is unaffected. Bloom runs only in high quality mode (mobile/reduced
   // keeps it off to protect frame rate).
+  if (viewer.scene.sun) viewer.scene.sun.show = false
+  if (viewer.scene.moon) viewer.scene.moon.show = false
   const bloomSettings = bloomSettingsForQuality(qualityMode)
   const bloom = viewer.scene.postProcessStages.bloom
   bloom.enabled = bloomSettings.enabled
@@ -925,6 +928,7 @@ export function CesiumAtlasGlobe({
         scene3DOnly
         sceneModePicker={false}
         selectionIndicator={false}
+        skyBox={false}
         timeline={false}
         useBrowserRecommendedResolution={false}
       >
