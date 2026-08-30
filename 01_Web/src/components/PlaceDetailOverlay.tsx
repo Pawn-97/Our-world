@@ -239,15 +239,6 @@ export function PlaceDetailOverlay({
             <ArrowLeft className="size-5" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 grid size-11 place-items-center rounded-full border border-white/16 bg-slate-950/62 text-slate-100 backdrop-blur-xl transition hover:bg-slate-950/82 active:scale-95 sm:right-8 sm:top-6"
-          aria-label="关闭详情"
-          title="关闭详情"
-        >
-          <X className="size-5" />
-        </button>
 
         <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-3xl px-5 pb-6 sm:px-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-300/85">
