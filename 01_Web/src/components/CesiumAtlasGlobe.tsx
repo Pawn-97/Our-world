@@ -38,7 +38,6 @@ import type {
 } from '../domain/types'
 import type { GlobeQualityMode } from '../globeQuality'
 import {
-  atmosphereShiftForQuality,
   bloomSettingsForQuality,
   markerBreathing,
   markerHaloSizeFor,
@@ -196,6 +195,15 @@ const cameraScaleStates: Record<
 const labelHideCameraHeight = 6_000_000
 const labelShowCameraHeight = 5_400_000
 
+// Screen-space label declutter (UX follow-up): the pure camera-height rule
+// above is not enough at country scale, where close city pairs (Suzhou /
+// Shanghai, Kyoto / Osaka) still overlap. When labels are on, projected
+// label positions closer than these thresholds collide and only the
+// highest-priority one (selected > hovered group > selected group > rest)
+// keeps its label.
+const labelCollisionThresholdX = 110
+const labelCollisionThresholdY = 34
+
 const cameraScaleForGlobeScale = (scale: number): CameraScale => {
   if (scale < 1.15) return 'street'
   if (scale < 1.68) return 'city'
@@ -263,13 +271,10 @@ const configureViewer = (viewer: CesiumViewer, qualityMode: GlobeQualityMode = '
   viewer.camera.percentageChanged = 0.01
 
   // UX-3/4 atmosphere: pure-black space with a restrained blue limb glow.
-  // The atmosphere gets a gentle saturation push; bloom runs only in high
-  // quality mode (mobile/reduced keeps it off to protect frame rate).
-  const atmosphereShift = atmosphereShiftForQuality(qualityMode)
-  if (viewer.scene.skyAtmosphere) {
-    viewer.scene.skyAtmosphere.saturationShift = atmosphereShift.saturationShift
-    viewer.scene.skyAtmosphere.brightnessShift = atmosphereShift.brightnessShift
-  }
+  // Field testing showed the extra skyAtmosphere saturation/brightness shift
+  // pushed the oceans into electric blue, so the limb now keeps Cesium's
+  // physical defaults; bloom runs only in high quality mode (mobile/reduced
+  // keeps it off to protect frame rate).
   const bloomSettings = bloomSettingsForQuality(qualityMode)
   const bloom = viewer.scene.postProcessStages.bloom
   bloom.enabled = bloomSettings.enabled
@@ -375,8 +380,29 @@ export function CesiumAtlasGlobe({
   const [visiblePlaceIds, setVisiblePlaceIds] = useState<Set<PlaceId> | null>(null)
   const [visibleRouteIds, setVisibleRouteIds] = useState<Set<string> | null>(null)
   // Far camera heights hide place labels (dots only); updated by the same
-  // camera listeners that drive hemisphere culling.
+  // camera listeners that drive hemisphere culling. The ref mirrors the
+  // state so the culling closure (which outlives individual renders) always
+  // reads the current value.
   const [labelsHiddenByHeight, setLabelsHiddenByHeight] = useState(true)
+  const labelsHiddenByHeightRef = useRef(true)
+  // Screen-space collision declutter: ids whose labels are suppressed
+  // because a higher-priority label sits within the collision threshold.
+  const [labelCollisionHiddenIds, setLabelCollisionHiddenIds] = useState<Set<PlaceId> | null>(null)
+  // Selection snapshot for the culling effect below — its dependency list is
+  // intentionally limited to geometry inputs, so it reads selection through
+  // this ref instead of closing over stale values.
+  const labelSelectionRef = useRef({
+    selectedPlaceId,
+    hoveredCountryGroupId,
+    selectedCountryGroupId,
+  })
+  useEffect(() => {
+    labelSelectionRef.current = {
+      selectedPlaceId,
+      hoveredCountryGroupId,
+      selectedCountryGroupId,
+    }
+  }, [selectedPlaceId, hoveredCountryGroupId, selectedCountryGroupId])
   const countryGroupById = useMemo(
     () => new Map(countryGroups.map((group) => [group.id, group])),
     [countryGroups],
@@ -608,11 +634,11 @@ export function CesiumAtlasGlobe({
     const updateVisibleHemisphere = () => {
       const cameraPosition = viewer.camera.positionWC
       const cameraHeight = viewer.camera.positionCartographic.height
-      setLabelsHiddenByHeight((current) =>
-        current
-          ? cameraHeight > labelShowCameraHeight
-          : cameraHeight > labelHideCameraHeight,
-      )
+      const nextLabelsHidden = labelsHiddenByHeightRef.current
+        ? cameraHeight > labelShowCameraHeight
+        : cameraHeight > labelHideCameraHeight
+      labelsHiddenByHeightRef.current = nextLabelsHidden
+      setLabelsHiddenByHeight(nextLabelsHidden)
       const nextPlaceIds = new Set(
         places
           .filter((place) =>
@@ -633,8 +659,65 @@ export function CesiumAtlasGlobe({
           .map((route) => route.id),
       )
 
+      // Screen-space label declutter: among the places whose label would
+      // render (same eligibility as the label `show` condition below), keep
+      // labels greedy by priority and suppress any that land within the
+      // collision threshold of an already-kept label.
+      const nextCollisionHiddenIds = new Set<PlaceId>()
+      if (!nextLabelsHidden) {
+        const selection = labelSelectionRef.current
+        const labelPriority = (place: (typeof places)[number]) =>
+          place.id === selection.selectedPlaceId
+            ? 0
+            : selection.hoveredCountryGroupId !== undefined &&
+                place.countryGroupId === selection.hoveredCountryGroupId
+              ? 1
+              : selection.selectedCountryGroupId !== undefined &&
+                  place.countryGroupId === selection.selectedCountryGroupId
+                ? 2
+                : 3
+        const labelCandidates = places
+          .filter(
+            (place) =>
+              nextPlaceIds.has(place.id) &&
+              (sparseMarkerSet ||
+                place.id === selection.selectedPlaceId ||
+                (selection.hoveredCountryGroupId !== undefined &&
+                  place.countryGroupId === selection.hoveredCountryGroupId) ||
+                (selection.selectedCountryGroupId !== undefined &&
+                  place.countryGroupId === selection.selectedCountryGroupId)),
+          )
+          // Stable sort: equal priorities keep the original place order.
+          .sort((left, right) => labelPriority(left) - labelPriority(right))
+        const keptLabels: Array<{ x: number; y: number }> = []
+
+        for (const place of labelCandidates) {
+          const screenPosition = SceneTransforms.worldToWindowCoordinates(
+            viewer.scene,
+            cityPosition(place.lng, place.lat),
+          )
+          if (!screenPosition) continue
+
+          const collides = keptLabels.some(
+            (kept) =>
+              Math.abs(kept.x - screenPosition.x) < labelCollisionThresholdX &&
+              Math.abs(kept.y - screenPosition.y) < labelCollisionThresholdY,
+          )
+          if (collides && labelPriority(place) >= 2) {
+            // Selected / hovered-group labels always keep their label; only
+            // group and background labels get suppressed.
+            nextCollisionHiddenIds.add(place.id)
+            continue
+          }
+          keptLabels.push({ x: screenPosition.x, y: screenPosition.y })
+        }
+      }
+
       setVisiblePlaceIds((current) => setsMatch(current, nextPlaceIds) ? current : nextPlaceIds)
       setVisibleRouteIds((current) => setsMatch(current, nextRouteIds) ? current : nextRouteIds)
+      setLabelCollisionHiddenIds((current) =>
+        setsMatch(current, nextCollisionHiddenIds) ? current : nextCollisionHiddenIds,
+      )
     }
 
     updateVisibleHemisphereRef.current = updateVisibleHemisphere
@@ -665,7 +748,14 @@ export function CesiumAtlasGlobe({
       viewer.camera.moveEnd.removeEventListener(updateVisibleHemisphere)
       updateVisibleHemisphereRef.current = () => undefined
     }
-  }, [places, mappedRoutes, viewerReadyVersion])
+  }, [places, mappedRoutes, sparseMarkerSet, viewerReadyVersion])
+
+  // Selection changes alter label eligibility and priority (selected and
+  // hovered-group labels always show), so re-run the declutter pass even
+  // without camera motion.
+  useEffect(() => {
+    updateVisibleHemisphereRef.current()
+  }, [selectedPlaceId, hoveredCountryGroupId, selectedCountryGroupId])
 
   useEffect(() => {
     const viewer = viewerRef.current?.cesiumElement
@@ -862,7 +952,6 @@ export function CesiumAtlasGlobe({
           dynamicAtmosphereLighting={isNight && qualityMode === 'high'}
           enableLighting={isNight && qualityMode === 'high'}
           show={showMapContent}
-          showGroundAtmosphere
           vertexShadowDarkness={isNight ? 0.48 : 0.3}
         />
         <SkyAtmosphere show={showMapContent} />
@@ -882,9 +971,14 @@ export function CesiumAtlasGlobe({
             (route.fromCountryGroupId === selectedCountryGroupId || route.toCountryGroupId === selectedCountryGroupId)
           const isActive = selectedPlaceId ? isPlaceRoute : Boolean(isCountryRoute)
           const isMuted = selectionMode !== 'overview' && !isActive
+          // Route arcs only render for the active selection: overview mode
+          // stays clean (field testing read the always-on arcs as stray
+          // connector lines between markers), country/place mode shows only
+          // the routes attached to the current selection.
           const isVisible =
             (visibleRouteIds?.has(route.id) ?? true) &&
-            (selectionMode !== 'place' || isPlaceRoute)
+            selectionMode !== 'overview' &&
+            isActive
           const routeColor = Color.fromCssColorString(
             isActive ? selectedAccent : '#bae6fd',
           ).withAlpha(
@@ -966,7 +1060,9 @@ export function CesiumAtlasGlobe({
                 show:
                   isSelected ||
                   isHoveredGroupPlace ||
-                  (!labelsHiddenByHeight && (sparseMarkerSet || isGroupPlace)),
+                  (!labelsHiddenByHeight &&
+                    !(labelCollisionHiddenIds?.has(place.id) ?? false) &&
+                    (sparseMarkerSet || isGroupPlace)),
                 showBackground: true,
                 style: LabelStyle.FILL_AND_OUTLINE,
                 text: place.nameEn ?? place.name,

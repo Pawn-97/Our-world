@@ -23,8 +23,11 @@ type MapSourceLayers = {
 
 // Esri World Imagery direct REST tiles (UX-2): no token, no Cesium ion, no
 // on-screen badge. Attribution rides in the Cesium credit line / lightbox.
+// Host note: services.arcgisonline.com is unreachable from some networks
+// (measured 2026-08-30: connection stall, HTTP 000); server.arcgisonline.com
+// serves the identical official tileset and is reachable.
 export const esriImageryUrlTemplate =
-  'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 const esriImageryCredit = 'Esri, Maxar, Earthstar Geographics'
 
 const tiandituToken = (import.meta.env.VITE_TIANDITU_TOKEN ?? '').trim()

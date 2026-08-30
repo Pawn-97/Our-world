@@ -149,6 +149,13 @@ button {
   opacity: 0.48;
 }
 
+/* UX-2 follow-up: hide the default Cesium ion logo badge; the "Data
+   attribution" text link and its lightbox stay so Esri attribution remains
+   one click away. */
+.cesium-atlas-shell .cesium-credit-logoContainer {
+  display: none !important;
+}
+
 .cesium-lab-page .hero-glass-layer {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.22)),

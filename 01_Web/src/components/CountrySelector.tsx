@@ -278,7 +278,6 @@ export function CountrySelector({
                             />
                             <button
                               type="button"
-                              disabled={!isOpen}
                               onClick={() => onSelectPlace(place.id)}
                               data-selected={isPlaceSelected}
                               className={`atlas-city-button flex w-full items-center justify-between gap-2 rounded-full border px-3 py-2 text-left text-xs font-semibold transition duration-200 ${

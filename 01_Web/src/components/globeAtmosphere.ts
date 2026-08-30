@@ -13,31 +13,18 @@ export type BloomSettings = {
   stepSize: number
 }
 
-export type AtmosphereShift = {
-  saturationShift: number
-  brightnessShift: number
-}
-
 // Restrained bloom: just enough to let the atmosphere limb and marker halos
-// glow against pure-black space. Reduced quality (mobile / coarse pointer)
-// disables it entirely — the post-process stage is the first thing to go
-// when the GPU budget is tight.
+// glow against pure-black space. Field testing showed the previous values
+// (contrast 116 / brightness -0.12) blew out bright landmasses (e.g. the
+// Tibetan plateau read as white), so the high-quality pass now keeps Cesium's
+// stock contrast and only trims the glow threshold. Reduced quality (mobile /
+// coarse pointer) disables bloom entirely — the post-process stage is the
+// first thing to go when the GPU budget is tight.
 export const bloomSettingsForQuality = (qualityMode: GlobeQualityMode): BloomSettings => {
   if (qualityMode === 'reduced') {
     return { enabled: false, contrast: 128, brightness: -0.3, delta: 1, sigma: 2, stepSize: 1 }
   }
-  return { enabled: true, contrast: 116, brightness: -0.12, delta: 0.9, sigma: 1.8, stepSize: 1 }
-}
-
-// Slight blue-saturation push so the atmosphere reads as a clean blue glow
-// rather than a grey haze. Kept identical across quality modes: uniform
-// shifts are cheap compared to the bloom stage.
-export const atmosphereShiftForQuality = (qualityMode: GlobeQualityMode): AtmosphereShift => {
-  void qualityMode // deliberate: identical shift in both modes (see comment)
-  return {
-    saturationShift: 0.12,
-    brightnessShift: 0.02,
-  }
+  return { enabled: true, contrast: 104, brightness: -0.3, delta: 1, sigma: 2, stepSize: 1 }
 }
 
 // Soft halo diameter behind a place marker (the point primitive stays the

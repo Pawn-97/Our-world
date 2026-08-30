@@ -23,7 +23,7 @@ describe('mapSourceOptions', () => {
 
 describe('esriImageryUrlTemplate', () => {
   it('targets the Esri World Imagery REST endpoint with z/y/x placeholders', () => {
-    expect(esriImageryUrlTemplate).toContain('services.arcgisonline.com')
+    expect(esriImageryUrlTemplate).toContain('server.arcgisonline.com')
     expect(esriImageryUrlTemplate).toContain('World_Imagery')
     expect(esriImageryUrlTemplate).toContain('{z}/{y}/{x}')
   })
