@@ -2819,3 +2819,123 @@ button {
     -webkit-line-clamp: 2;
   }
 }
+
+/* -------------------------------------------------------------------------
+ * Scrapbook place detail — the light "map paper + collage" language used by
+ * PlaceDetailOverlay and src/components/scrapbook/*.
+ *
+ * The globe page stays dark and immersive; opening a place turns to a paper
+ * page: tilted polaroids, washi tape, torn note cards, sticker pills and a
+ * passport stamp. Everything here is static paint (gradients, transforms,
+ * shadows) — no backdrop-filter, no animation loops — so scrolling a 19-photo
+ * wall stays smooth on a phone.
+ * ---------------------------------------------------------------------- */
+
+.scrap-root {
+  --scrap-ink: #1b2430;
+  --scrap-ink-soft: #5b6472;
+  --scrap-paper: #f7f3ea;
+  --scrap-card: #fffdf6;
+  --scrap-hand: 'Kaiti SC', 'STKaiti', KaiTi, 'Bradley Hand', 'Segoe Print', cursive;
+  color: var(--scrap-ink);
+  background-color: var(--scrap-paper);
+  background-image:
+    radial-gradient(120% 70% at 12% -10%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(80% 55% at 100% 6%, rgba(176, 210, 224, 0.34), transparent 58%),
+    radial-gradient(75% 50% at 40% 100%, rgba(226, 209, 178, 0.4), transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420' viewBox='0 0 420 420'%3E%3Cg fill='none' stroke='%237f9bb0' stroke-opacity='0.13' stroke-width='1.1'%3E%3Cpath d='M-20 90 C 70 40 150 140 250 92 S 380 40 440 100'/%3E%3Cpath d='M-20 180 C 80 128 160 232 262 180 S 392 128 452 190'/%3E%3Cpath d='M-20 270 C 70 220 150 320 250 272 S 380 220 440 280'/%3E%3Cpath d='M-20 360 C 80 308 160 412 262 360 S 392 308 452 370'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  background-size: auto, auto, auto, 420px 420px;
+  background-attachment: local, local, local, scroll;
+}
+
+.scrap-header {
+  background: linear-gradient(
+    180deg,
+    #faf7f0 68%,
+    rgba(250, 247, 240, 0.94) 88%,
+    rgba(250, 247, 240, 0.72) 100%
+  );
+  box-shadow: 0 1px 0 rgba(26, 31, 43, 0.06);
+}
+
+.scrap-hand {
+  font-family: var(--scrap-hand);
+  letter-spacing: 0.01em;
+}
+
+.scrap-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #98a0ae;
+}
+
+.scrap-polaroid {
+  padding: 9px 9px 30px;
+  border-radius: 3px;
+  background: #fffdf8;
+  box-shadow:
+    0 22px 34px -20px rgba(26, 31, 43, 0.5),
+    0 2px 6px rgba(26, 31, 43, 0.09),
+    inset 0 0 0 1px rgba(26, 31, 43, 0.05);
+}
+
+.scrap-tape {
+  border-radius: 1px;
+  opacity: 0.94;
+  mix-blend-mode: multiply;
+}
+
+.scrap-tape::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.34) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.scrap-torn {
+  border-radius: 2px;
+}
+
+.scrap-dock {
+  border: 1px solid rgba(26, 31, 43, 0.08);
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: 0 22px 44px -20px rgba(26, 31, 43, 0.55);
+  scrollbar-width: none;
+}
+
+.scrap-dock::-webkit-scrollbar {
+  display: none;
+}
+
+.scrap-dock-active {
+  color: #fffdf8;
+  background: linear-gradient(180deg, #2c3746, #141b24);
+  box-shadow: 0 6px 14px -8px rgba(20, 27, 36, 0.9);
+}
+
+/* Rotated phones: keep the collage above the keyboard-height viewport. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .scrap-polaroid {
+    padding: 6px 6px 22px;
+  }
+
+  .scrap-dock {
+    padding-block: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrap-root *,
+  .scrap-root *::after,
+  .scrap-root *::before {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
