@@ -10,7 +10,7 @@
     "lint": "eslint src scripts vite.config.ts",
     "media:check": "node scripts/import-media.mjs",
     "media:import": "node scripts/import-media.mjs --apply",
-    "media:sample": "node scripts/generate-sample-media.mjs",
+    "media:material": "node scripts/publish-material.mjs",
     "privacy:check": "git -C .. ls-files --cached --others --exclude-standard -z | node scripts/privacy-audit.mjs --manifest-stdin",
     "test": "vitest run",
     "validate": "node scripts/validate-content.mjs",

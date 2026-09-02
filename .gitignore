@@ -15,6 +15,7 @@ dist-ssr
 *.local
 
 # Private media intake and generated user library
+素材/
 02_Assets/MediaInbox/*
 !02_Assets/MediaInbox/README.md
 !02_Assets/MediaInbox/_country-template/

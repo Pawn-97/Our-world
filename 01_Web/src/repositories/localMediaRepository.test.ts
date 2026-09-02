@@ -27,7 +27,7 @@ const catalogItem = {
   status: 'ready',
 }
 
-const stubMediaEndpoints = () => {
+const stubMediaEndpoints = (hiddenMediaId: string) => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/__travelatlas/editor/media')) {
@@ -39,7 +39,7 @@ const stubMediaEndpoints = () => {
         state: {
           schemaVersion: 1,
           mediaOrderByPlace: {},
-          hiddenMediaIds: ['media-beijing-sample-01'],
+          hiddenMediaIds: [hiddenMediaId],
           coverMediaByPlace: { 'place-beijing': 'media-imported-test-1' },
         },
       })
@@ -56,7 +56,12 @@ afterEach(() => {
 
 describe('localMediaRepository (dev in-place refresh)', () => {
   it('refreshLocalMediaCache swaps in the on-disk catalog and curation state', async () => {
-    stubMediaEndpoints()
+    // Any bundled 北京 photo works as the "hidden by curation" fixture.
+    // Reading it from the repository keeps this test alive when the tracked
+    // photo set is republished with different content-hash ids.
+    const bundledPhotoId = (await createLocalMediaRepository().listForPlace('place-beijing'))[0]?.id
+    if (!bundledPhotoId) throw new Error('content/media.json must carry at least one 北京 photo')
+    stubMediaEndpoints(bundledPhotoId)
 
     await refreshLocalMediaCache()
 
@@ -65,12 +70,12 @@ describe('localMediaRepository (dev in-place refresh)', () => {
     // Newly imported catalog item is visible without a reload.
     expect(beijingMedia.map((item) => item.id)).toContain('media-imported-test-1')
     // Curation state hid one bundled item and chose the new cover.
-    expect(beijingMedia.map((item) => item.id)).not.toContain('media-beijing-sample-01')
-    expect(getMediaEditorState().hiddenMediaIds).toEqual(['media-beijing-sample-01'])
+    expect(beijingMedia.map((item) => item.id)).not.toContain(bundledPhotoId)
+    expect(getMediaEditorState().hiddenMediaIds).toEqual([bundledPhotoId])
     const cover = await repository.getCoverForPlace({ id: 'place-beijing' } as Parameters<typeof repository.getCoverForPlace>[0])
     expect(cover?.id).toBe('media-imported-test-1')
     const hidden = await repository.listHiddenIdsForPlace('place-beijing')
-    expect(hidden).toContain('media-beijing-sample-01')
+    expect(hidden).toContain(bundledPhotoId)
   })
 
   it('primeLocalMediaCache keeps the current caches when the middleware is unreachable', async () => {
