@@ -37,7 +37,7 @@ V1 全部 8 个里程碑（M0–M7）已完成并上线；「真实内容填充�
 7. **移除地图页 header**（`63f758b`）：通宽标题 banner 全部视口移除，`--atlas-overlay-top` 收紧（桌面 12px / 移动 8px）。
 8. **详情页去重**（`9931d71`）：移除右上角 ×，只留左上角 ← 返回。
 9. **真实内容上线**：`scripts/publish-material.mjs`（`npm run media:material`）把 `素材/<城市>/` 的原片重编码为两级 WebP 写入 **tracked** 的 `public/media/content/<slug>/` + `content/media.json`，顺手按 EXIF 日期把照片挂到对应 visit 的相册记忆上，并自动挑选封面。EXIF/GPS 在重编码时被丢弃，原片目录 `素材/` 已加入 `.gitignore`。程序化示例图与 `generate-sample-media.mjs` 一并退役。
-10. **详情页 scrapbook 改版**：深色全屏页 → 浅色「地图纸 + 拼贴」语言（拍立得 + 和纸胶带 + 撕纸便签卡 + 贴纸药丸 + 护照印章 + 手绘 doodles + 底部到访筛选 dock）。几何全部由内容 ID 派生（`scrapbook/scrapbookStyle.ts`，含单测），渲染稳定不抖动；桌面 ≥1024px 双栏（左栏 sticky，封面高度按 vh 封顶），移动单栏。地图页仍保持深色沉浸 —— 打开地点＝翻到一页纸。
+10. **详情页 scrapbook 改版**：深色全屏页 → 浅色「地图纸 + 拼贴」语言（拍立得 + 和纸胶带 + 撕纸便签卡 + 贴纸药丸 + 护照印章 + 手绘 doodles + 底部到访筛选 dock）。几何全部由内容 ID 派生（`scrapbook/scrapbookStyle.ts`，含单测），渲染稳定不抖动；桌面 ≥1024px 双栏（左栏 sticky，封面高度按 vh 封顶），移动单栏，横屏矮视口（landscape 且 ≤520px 高）封面缩到 46% 宽并裁成 3:2、筛选 dock 收到右下角。已用 headless Chrome 在 1440/1280/390×844/844×390 四个视口截图核对。地图页仍保持深色沉浸 —— 打开地点＝翻到一页纸。
 
 ## 3. 内容现状（`01_Web/content/`）
 

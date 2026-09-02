@@ -304,8 +304,8 @@ export function PlaceDetailOverlay({
 
       <main className="mx-auto w-full max-w-[720px] px-4 pb-44 pt-5 lg:grid lg:max-w-[1180px] lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:gap-14 lg:px-8 lg:pb-24 lg:pt-8">
         {/* ── Hero collage ─────────────────────────────────────────────── */}
-        <div className="lg:sticky lg:top-24 lg:self-start">
-          <div className="relative mx-auto w-[76%] max-w-[300px] sm:w-[60%] lg:mt-8 lg:w-[88%] lg:max-w-none">
+        <div className="scrap-hero lg:sticky lg:top-24 lg:self-start">
+          <div className="scrap-hero__collage relative mx-auto w-[76%] max-w-[300px] sm:w-[60%] lg:mt-8 lg:w-[88%] lg:max-w-none">
             <StickyNote seed={polaroidSeed(place.id, 'note')} className="-top-5 right-0 z-20 sm:-right-3">
               {stickyLabel}
             </StickyNote>
@@ -339,19 +339,19 @@ export function PlaceDetailOverlay({
                 label={(group.nameEn ?? group.name).toUpperCase()}
                 center={group.flag}
                 accent={accent}
-                className="absolute -right-3 bottom-12 z-20 hidden sm:inline-grid lg:-right-6"
+                className="absolute -right-2 bottom-14 z-20 grid sm:-right-3 lg:-right-6"
               />
             ) : null}
-            <SunglassesDoodle className="-left-6 bottom-20 z-0 w-16 sm:-left-12 sm:w-20" />
-            <CameraDoodle className="-bottom-10 right-2 z-0 w-16 sm:-right-4 sm:w-[74px]" />
+            <SunglassesDoodle className="-left-2 bottom-20 z-0 w-14 sm:-left-8 sm:w-16 lg:-left-12 lg:w-20" />
+            <CameraDoodle className="-bottom-10 right-1 z-0 w-16 sm:-right-4 sm:w-[74px]" />
             {group?.countryCode === 'cn' ? (
-              <PinDoodle className="-left-2 top-1/2 z-0 w-6 sm:-left-8" />
+              <PinDoodle className="left-0 top-1/2 z-0 w-6 sm:-left-4 lg:-left-8" />
             ) : (
-              <PlaneDoodle className="-left-6 top-1/2 z-0 w-14 sm:-left-10" />
+              <PlaneDoodle className="-left-1 top-1/2 z-0 w-12 sm:-left-6 lg:-left-10" />
             )}
           </div>
 
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-2 lg:mt-14">
+          <div className="scrap-hero__chips mt-12 flex flex-wrap items-center justify-center gap-2 lg:mt-14">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-black/8 bg-white/85 px-3 py-1.5 text-[12px] font-semibold text-[#414b59]">
               <span
                 className="inline-block size-2 shrink-0 rounded-full"
@@ -740,7 +740,7 @@ export function PlaceDetailOverlay({
       {visits.length > 1 ? (
         <nav
           aria-label="选择到访"
-          className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:pb-6"
+          className="scrap-dock-bar pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:pb-6"
         >
           <div className="scrap-dock pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full px-2.5 py-2">
             <button

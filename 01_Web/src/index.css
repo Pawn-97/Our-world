@@ -2920,7 +2920,8 @@ button {
   box-shadow: 0 6px 14px -8px rgba(20, 27, 36, 0.9);
 }
 
-/* Rotated phones: keep the collage above the keyboard-height viewport. */
+/* Rotated phones: the hero must never eat the whole short viewport — a
+   landscape capture showed one full-bleed photo with no text reachable. */
 @media (orientation: landscape) and (max-height: 520px) {
   .scrap-polaroid {
     padding: 6px 6px 22px;
@@ -2928,6 +2929,28 @@ button {
 
   .scrap-dock {
     padding-block: 4px;
+  }
+
+  .scrap-hero__collage {
+    width: min(46%, 340px);
+    margin-inline: 0 18px;
+  }
+
+  .scrap-hero__collage .scrap-polaroid img {
+    aspect-ratio: 3 / 2;
+    max-height: calc(100dvh - 150px);
+  }
+
+  .scrap-hero__chips {
+    margin-top: 10px;
+    justify-content: flex-start;
+  }
+
+  /* Corner-docked, like the map controls: a centred pill would sit on top of
+     the hero chips in a 390px-tall viewport. */
+  .scrap-dock-bar {
+    justify-content: flex-end;
+    padding-bottom: 10px;
   }
 }
 

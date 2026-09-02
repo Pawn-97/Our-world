@@ -139,7 +139,7 @@ export const CountryStamp = ({
 }) => (
   <span
     aria-hidden="true"
-    className={`pointer-events-none inline-grid size-[92px] place-items-center ${className}`}
+    className={`pointer-events-none size-[92px] place-items-center ${className}`}
     style={{ transform: 'rotate(-11deg)', opacity: 0.9 }}
   >
     <svg viewBox="0 0 100 100" className="size-full">
