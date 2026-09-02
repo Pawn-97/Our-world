@@ -18,6 +18,10 @@ The complete folder contract, conversion rules, metadata requirements, and no-de
 
 StarMap is an open-source website shell. Personal travel media never enters the public template. Only explicitly licensed or generated sample assets may be included in a clean public repository; see the [open-source privacy boundary](../03_Reference/TravelAtlas_open_source_privacy_boundary.md).
 
+## Share Artifacts
+
+- `our-world-qr.png` — scannable QR for the published site (`https://pawn-97.github.io/Our-world/`), 1200×1200 px, error correction H, 4-module quiet zone. Regenerate without touching project dependencies: `npx --yes qrcode@1.5.4 <url> -o our-world-qr.png -w 1200 -e H -m 4`. Scanning lands on the access-code gate, so the visitor still needs the code from the owner.
+
 ## Documentation
 
 - [Public guide](../README.md)

@@ -38,6 +38,7 @@ V1 全部 8 个里程碑（M0–M7）已完成并上线；「真实内容填充�
 8. **详情页去重**（`9931d71`）：移除右上角 ×，只留左上角 ← 返回。
 9. **真实内容上线**：`scripts/publish-material.mjs`（`npm run media:material`）把 `素材/<城市>/` 的原片重编码为两级 WebP 写入 **tracked** 的 `public/media/content/<slug>/` + `content/media.json`，顺手按 EXIF 日期把照片挂到对应 visit 的相册记忆上，并自动挑选封面。EXIF/GPS 在重编码时被丢弃，原片目录 `素材/` 已加入 `.gitignore`。程序化示例图与 `generate-sample-media.mjs` 一并退役。
 10. **详情页 scrapbook 改版**：深色全屏页 → 浅色「地图纸 + 拼贴」语言（拍立得 + 和纸胶带 + 撕纸便签卡 + 贴纸药丸 + 护照印章 + 手绘 doodles + 底部到访筛选 dock）。几何全部由内容 ID 派生（`scrapbook/scrapbookStyle.ts`，含单测），渲染稳定不抖动；桌面 ≥1024px 双栏（左栏 sticky，封面高度按 vh 封顶），移动单栏，横屏矮视口（landscape 且 ≤520px 高）封面缩到 46% 宽并裁成 3:2、筛选 dock 收到右下角。已用 headless Chrome 在 1440/1280/390×844/844×390 四个视口截图核对。地图页仍保持深色沉浸 —— 打开地点＝翻到一页纸。
+11. **访问密码门 + 扫码入口**：`src/main.tsx` 用 `<AccessGate>` 包住 `<App>`，密码不通过就不挂载 App（内容、Cesium 一律不加载）。密码存成 XOR 掩码字节（`src/domain/accessCode.ts`，`CODE_MASK = 0x5a`），公开仓库与 bundle 里都 grep 不到明文；换密码只需按 `code.charCodeAt(i) ^ 0x5a` 重算那 4 个字节。解锁状态只活在内存里 —— 刷新即重新上锁（按用户要求「每次都要输」）。UI 复用 scrapbook 纸面 + 拍立得卡（`02_Assets/our-world-qr.png` 是站点二维码，1200px、纠错 H）。**边界要说清楚**：站点是 GitHub Pages 静态托管、仓库是 public，所以这道门只挡误入的普通访客，**不加密任何东西** —— 内容构建进 bundle、照片在 `public/media/content/`，绕过门直接抓 URL 或翻仓库都拿得到。要真正的私密性只有两条路：仓库转私有（私有仓库 Pages 需付费计划），或把 content/媒体在构建期整体加密。
 
 ## 3. 内容现状（`01_Web/content/`）
 
