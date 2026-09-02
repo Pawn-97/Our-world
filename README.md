@@ -6,8 +6,11 @@
 
 *A private 3D-globe travel-memory site for two people. World → Place → Visit → Memory. V1: local authoring, static build, GitHub Pages — no cloud anything.*
 
+**线上站点**：https://pawn-97.github.io/Our-world/ （V1 M0–M7 已完成并上线）
+
 ## 产品文档
 
+- [PROGRESS.md](PROGRESS.md) — **开发进度与交接文档（接手工作先读这个）**
 - [PRODUCT.md](PRODUCT.md) — 产品定位与体验模型
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 架构规则
 - [MVP.md](MVP.md) — V1 范围
@@ -24,7 +27,9 @@ npm run dev
 
 ## 影像与令牌
 
-不配任何令牌也能运行：应用内置低清 Natural Earth II 离线影像作为兜底。可选的 Cesium ion / Tianditu 令牌写入 `01_Web/.env.local`（已被 Git 忽略），**绝不提交、不粘贴到聊天或文档中**。详见 [01_Web/README.md](01_Web/README.md)。
+不配任何令牌也能运行：默认影像为 **Esri World Imagery 直连**（`server.arcgisonline.com`，无需 token、无屏上徽章）；无网络时可用内置低清 Natural Earth II 离线影像兜底（图源切换器中的「本地低清」）。可选的天地图令牌写入 `01_Web/.env.local`（已被 Git 忽略），**绝不提交、不粘贴到聊天或文档中**。详见 [01_Web/README.md](01_Web/README.md)。
+
+> 注意：项目已于 2026-08-30 起**完全移除 Cesium ion 依赖**（`93d2ebf`），代码不再消费 `VITE_CESIUM_ION_TOKEN`；历史文档中关于 ion 的描述以 [PROGRESS.md](PROGRESS.md) §2 为准。
 
 ## 项目结构
 
@@ -55,8 +60,8 @@ npm run media:check
 1. 在 GitHub 创建仓库并 push（`git remote add origin … && git push -u origin main`）。
 2. 仓库 **Settings → Pages → Source** 选择 **GitHub Actions**。
 3. 可选密钥（**Settings → Secrets and variables → Actions**）：
-   - `VITE_CESIUM_ION_TOKEN` — Cesium ion 在线影像令牌；不配置则使用内置低清离线影像，站点照常工作。
-   - `VITE_TIANDITU_TOKEN` — 天地图影像密钥（可选）。
+   - `VITE_TIANDITU_TOKEN` — 天地图影像密钥（可选；配置后图源切换器出现「天地图」，含中文注记）。
+   - ~~`VITE_CESIUM_ION_TOKEN`~~ — 已废弃：代码自 2026-08-30 起不再使用 Cesium ion，该 secret 可删除。
    - 真实令牌只存在于 Actions secrets，绝不写入任何被跟踪的文件。
 4. push 到 `main` 即触发发布；站点地址为 `https://<用户名>.github.io/<仓库名>/`（子路径由 workflow 自动注入 `BASE_PATH`，无需手工配置）。
 

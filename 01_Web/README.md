@@ -1,119 +1,111 @@
-# Our World Web Application
+# Our World Web 应用
 
-> **Note:** This app is now **Our World**, based on the StarMap codebase (MIT, by Aisland-SJL). Sections below that describe removed StarMap features (Journey page, drone media, meteor shower, release-update checker) are kept for operational reference only; those features no longer exist in this codebase. All ports, scripts, token rules, privacy boundaries, and media-pipeline instructions remain valid as written.
+> **说明：** 本应用是 **Our World**，基于 StarMap 代码库（MIT，作者 Aisland-SJL）演进而来。StarMap 的 Journey 页、无人机媒体工作流、流星雨特效、Release 更新检查器等功能已被移除，在本代码库中不复存在；文档不再保留这些功能的描述。
 
-This directory contains the runnable React, TypeScript, Vite, and Cesium application.
+本目录是可运行的 React + TypeScript + Vite + Cesium 应用。产品模型为 **World → Place → Visit → Memory**，体验模型为 **3D 地球 → 地点 → 回忆**。
 
-## Setup
+## 启动
 
-```powershell
+```bash
 npm ci
-npm run dev -- --host 127.0.0.1 --port 5174
+npm run dev
 ```
 
-Use port 5175 when the read-only rollback project is still occupying 5174.
+`npm run dev` 即 Vite 默认行为（默认端口 5173）；CLI 参数会透传给 Vite，需要固定地址时自行追加，例如 `npm run dev -- --host 127.0.0.1 --port 5174`。
 
-## One Product, Two Runtime States
+## 一个产品，两种运行状态
 
-StarMap is one codebase, not separate public and editor editions:
+Our World 是同一份代码，不区分公开的与可编辑的两个版本：
 
-- `npm run dev -- --host 127.0.0.1 --port 5175` starts the **local editing state**. Photo curation controls appear on place galleries (order, hide/show, cover). Changes are saved directly to ignored local data, with backups and atomic writes; photo uploads enter the immutable `MediaInbox` first and then use the existing three-tier importer.
-- `npm run build` creates the **public display state**. Editing controls are not rendered and the local write middleware does not exist. The output is a static website containing only the data and media deliberately included in that build.
+- `npm run dev` 启动**本地编辑态**。`scripts/local-editor-plugin.mjs` 是一个 `apply: 'serve'` 的 Vite 中间件，只在 dev server 存在，提供：
+  - `POST /__travelatlas/editor/content/{places|visits|memories}`——地点 / 到访 / 记忆的 upsert 与 delete；
+  - `GET /__travelatlas/editor/state|content|media`——保存后免刷新读回；
+  - `PUT /__travelatlas/editor/state`——照片排序 / 隐藏 / 封面选择；
+  - `POST /__travelatlas/editor/upload`、`/import`、`/media/delete`——图片先进入不可变的 `MediaInbox`，再走既有三级导入管线；
+  - `GET /__travelatlas/geocode/search`——地理编码代理（搜索式添加地点）：Photon 主用、Nominatim 兜底，**只有 Photon 失败（超时/网络/5xx）才回退，空结果视为正常答案、不回退**；两端各 8 秒超时；由 dev server 服务端发起请求（受控 User-Agent、无 CORS 问题），浏览器不直连。
+- 写操作有三重门禁：仅 loopback 地址（127.0.0.1 / ::1）、要求 `x-travelatlas-local-editor: 1` 请求头、Origin 白名单（`http://127.0.0.1` / `http://localhost`）。
+- `scripts/content-store.mjs` 是**唯一**写 `content/*.json` 的模块：所有变更经单 promise 队列串行化，先 `.bak` 备份再 tmp+rename 原子写入，且每次落盘前用与 `npm run validate` **完全相同**的 `validateContent` 规则做全量校验（失败返回 422 及校验明细）。
+- 编辑器 UI（Milestone 5）：Place / Visit / Memory 的增删改、搜索式添加地点、照片导入与排序 / 隐藏 / 封面。所有编辑入口都在 `import.meta.env.DEV` 门控之后、经动态 import 加载，**生产构建不含任何编辑器端点字符串**——`npm run dist:check` 断言 `__travelatlas` 与 `__ourWorldViewer`（DEV 调试句柄）不出现在产物中。
+- `npm run build` 产出**公开只读态**：无编辑控件、无写中间件，静态站点只包含该次构建刻意纳入的数据与媒体。
 
-Every person who clones the open-source project receives the same local editing capability. No DeepSeek Harness, chat-command relay, or AI service is required for deterministic edits. An Agent remains useful when a country, city, date, coordinate, media type, or privacy decision is uncertain, but the editor never guesses those values.
+本地编辑器状态存在 `src/data/generated/*.local.json`（照片排序 / 隐藏 / 封面的 `editor-state.local.json`、导入媒体目录等），与私有媒体目录一起被 Git 忽略。世界内容（地点、到访、记忆）就是纳入 Git 的 `content/*.json`——由应用内编辑器或手工修改（ID 约定见 `content/README.md`）。隐藏是非破坏性的：源记录与 Inbox 原图不受影响。
 
-Local editor data is stored in `src/data/generated/editor-state.local.json`. It records photo display order, hidden photos, and cover choices per place; it is ignored by Git together with private media catalogs. World content — places, visits, memories — is edited directly in the tracked `content/*.json` files (see `content/README.md` for the ID convention); there is no in-app record editor. Hiding is non-destructive: source records and Inbox originals remain untouched.
+`src/repositories/localContentCache.ts` 是仓库层共享的原始内容缓存：生产环境五份 content 文件静态打包进 bundle；dev 启动时经中间件从磁盘 prime（dev server 外的手工改动无需重启即可见，中间件不可达时回退到打包快照），编辑器保存后同样经中间件 refresh，UI 免刷新反映写入。
 
-The editor separates two similar-looking recovery actions:
+编辑器区分两个相似的恢复动作：
 
-- **Undo this round** returns the current unsaved ordering and hide/show draft to the state that existed when the editor was opened. It does not erase previously saved data.
-- **Restore hidden items** explicitly removes saved hide flags, writes that change to the ignored local state, and reloads the page. It still does not delete or reconstruct source records.
+- **撤销本轮**：把尚未保存的排序与隐藏草稿恢复到打开编辑器时的状态，不清除已保存数据。
+- **恢复已隐藏项**：显式移除已保存的隐藏标记、写入被忽略的本地状态并就地刷新；同样不删除、不重建源记录。
 
-## Verification
+## 校验
 
-```powershell
+```bash
 npm run lint
+npx tsc --noEmit
 npm run test
 npm run validate
-npm run build
 npm run privacy:check
 npm run media:check
+npm run build
+npm run dist:check
 ```
 
-## Content and Private Data
+## 内容与私有数据
 
-Our World has two data layers:
+Our World 有两层数据：
 
-- `content/world.json`, `content/places.json`, `content/visits.json`, `content/memories.json`, and `content/media.json` are the **tracked** world content — the deliberate, publishable record of places, visits, and memories. `npm run validate` fails the workflow on missing or duplicate IDs, bad coordinates, dangling references, or bad enums.
-- `src/data/generated/*.local.json` files are **ignored** local state: the imported media catalog and the media editor choices (order, hidden, covers). They never enter Git.
+- `content/world.json`、`content/places.json`、`content/visits.json`、`content/memories.json`、`content/media.json` 是**纳入 Git** 的世界内容——刻意编写、可发布的地点 / 到访 / 记忆记录。`npm run validate` 会在 ID 缺失或重复、坐标非法、引用悬空、枚举非法时让工作流失败。
+- `src/data/generated/*.local.json` 是**被忽略**的本地状态：导入媒体目录与媒体编辑选择（排序、隐藏、封面），永不进入 Git。
 
-Run `npm run privacy:check` before preparing any public repository. It asserts that all five tracked content files are in the Git manifest and that private paths (Inbox originals, generated catalogs, local editor state, env files) are not. See the [open-source privacy boundary](../03_Reference/TravelAtlas_open_source_privacy_boundary.md) for the clean-history rule and deployment options.
+准备公开仓库前运行 `npm run privacy:check`：它断言五份 tracked content 文件都在 Git 清单内，且私有路径（Inbox 原图、生成的目录、本地编辑器状态、env 文件）不在。清史规则与部署选项见[开源隐私边界](../03_Reference/TravelAtlas_open_source_privacy_boundary.md)。
 
-## Import Personal Media
+## 导入个人媒体
 
-Users can simply ask an Agent to read the StarMap rules and explain how to import their photos. The Agent starts with the short [Media Inbox README](../02_Assets/MediaInbox/README.md), checks that every item maps to an existing place in `content/places.json` (grouped under its country), and asks before proceeding whenever required information is missing or uncertain.
+用户可以直接让 Agent 阅读规则并说明如何导入照片。Agent 从简短的 [Media Inbox README](../02_Assets/MediaInbox/README.md) 开始，核对每个条目都能映射到 `content/places.json` 中已有的地点（归入其国家），所需信息缺失或不确定时先提问再继续。
 
-After the files follow the tracked Inbox template, run:
+文件按 tracked 的 Inbox 模板放好后运行：
 
-```powershell
+```bash
 npm run media:check
 npm run media:import
 ```
 
-The first command is read-only and reports unresolved countries, places, formats, or drone metadata. After a clean preflight, the second command preserves a local original copy and generates two WebP derivatives for every still image: a `640 px` thumbnail for globe/sidebar/card surfaces and a `2400 px` preview for the photo viewer. Full-resolution photos and panoramas are requested only by explicit viewing actions. All three tiers use stable, hash-based paths inside the ignored local user library, and the ignored catalog records their dimensions. Restart the preview after importing.
+第一条命令只读，报告未解析的国家、地点、格式或无人机元数据。预检干净后，第二条命令保留本地原件副本，并为每张静态图片生成两级 WebP 衍生品：`640 px` 缩略图（地球 / 侧栏 / 卡片）与 `2400 px` 预览（照片查看器）。全分辨率照片与全景图仅由明确的查看行为请求。三级产物都在被忽略的本地用户媒体库内使用稳定的哈希路径，被忽略的目录记录其尺寸。导入后重启预览。
 
-Inbox source media must never be moved, renamed, overwritten, or deleted. Agents may create or update only the private mapping sidecars `country.json` and city-level `media.json`; supported still formats are optimized outside the Inbox by the importer, while unsupported formats still require a separate user-approved conversion step.
+Inbox 源媒体永远不得移动、重命名、覆盖或删除。Agent 只能创建或更新私有映射 sidecar `country.json` 与城市级 `media.json`；受支持的静态图片格式由导入器在 Inbox 之外优化，不支持的格式仍需单独经用户批准的转换步骤。
 
-See [`../03_Reference/TravelAtlas_media_import_protocol.md`](../03_Reference/TravelAtlas_media_import_protocol.md) for the complete user and Agent contract.
+完整用户与 Agent 契约见 [`../03_Reference/TravelAtlas_media_import_protocol.md`](../03_Reference/TravelAtlas_media_import_protocol.md)。
 
-## Environment and Cesium ion
+## 影像来源
 
-StarMap remains runnable without Cesium ion: when `VITE_CESIUM_ION_TOKEN` is empty, the app uses the bundled low-resolution Natural Earth II map. To enable online global imagery, the person who develops or deploys this copy of StarMap must use an app-specific token from their own Cesium ion account. Website visitors do not configure tokens, and a clean open-source clone never inherits the project author's token.
+Cesium ion 已整体移除：无 token、无 ion 影像、无 OSM Buildings；ion logo 徽章由 CSS 隐藏（「Data attribution」文字链接与 lightbox 保留，Esri 署名在其中），`npm run dist:check` 断言应用代码不含 `api.cesium.com`。
 
-For local development, copy `.env.example` to the ignored `.env.local` and enter the value there yourself. Create your own token at [Cesium ion Access Tokens](https://ion.cesium.com/tokens). An Agent may guide the setup, but it must never ask you to paste the complete token into chat or read it back. For production, configure `VITE_CESIUM_ION_TOKEN` in the hosting platform. Never commit or paste a real token into chat, source code, documentation, logs, screenshots, or examples.
+当前三个来源（`src/data/mapSources.ts`，底图 dock 的 Layers 按钮可切换，选择存 `localStorage` 键 `our-world:map-source`）：
 
-A Vite client variable is excluded from Git but is still observable by users of the built website. Use separate development and production tokens, keep only the public `assets:read` permission and required assets, restrict the production token to the final Allowed URLs, monitor per-token usage, and rotate only the affected token when necessary. Both tokens consume the same ion account quota; separation provides control and diagnostics, not additional quota.
+- **Esri（默认）**：World Imagery 官方 REST 瓦片直连 `server.arcgisonline.com`，**无需 token**（`services.arcgisonline.com` 在部分网络不可达，故用 server host；2026-08-30 实测）。
+- **天地图（可选）**：`VITE_TIANDITU_TOKEN` 配置后可用，WMTS `img` 影像底图 + `cia` 中文注记层。
+- **本地低清（离线兜底）**：打包的 Natural Earth II，无需网络与凭据。
 
-## Multiple Imagery Sources
+初始来源由 `VITE_MAP_SOURCE=auto|esri|tianditu|local` 指定；`auto` 恒为 Esri（无需凭据的在线源）。未配置凭据的来源行保持可见但禁用；控制组件不索取、不显示、不写出、不校验凭据内容。
 
-StarMap uses Cesium as its 3D engine and can draw imagery from Cesium ion, Tianditu, or the bundled Natural Earth II fallback. Configure both online credentials in `.env.local` when needed, then choose the initial source with `VITE_MAP_SOURCE=auto|cesium|tianditu|local`. `auto` keeps the existing priority of Cesium, then Tianditu, then local fallback.
+**令牌安全规则不变**：复制 `.env.example` 为被忽略的 `.env.local` 自行填写；令牌绝不提交进 Git、不贴进聊天 / 源码 / 文档 / 日志 / 截图。Vite 客户端变量虽被 Git 排除，但构建产物对网站用户可见——生产 token 要在各自平台控制台限制权限与 Allowed URL，开发与生产分开，必要时只轮换受影响的那个。
 
-Tianditu is integrated through Cesium's WMTS imagery provider as an imagery base layer plus a Chinese annotation layer. The bottom map dock always shows a Layers button and all three source rows. Cesium and Tianditu use a steady green status light when their environment value is present and a red light when it is absent; the bundled local fallback is always green. Unconfigured online rows remain visible but disabled. The control stores the user's available selection in browser local storage and never asks for, displays, writes, or validates credential contents. Production deployments must define the selected variables before the static build.
+## 架构
 
-## Public Interface Defaults
+- `src/components/CesiumAtlasGlobe.tsx` 是主地图实现（Cesium 细节不外泄到领域 / UI 层）。
+- `src/domain/` 存放 World → Place → Visit → Memory 领域类型与纯函数视图模型派生（国家分组、路线、日期范围）。
+- `src/repositories/` 存放仓库接口与本地实现：加载 tracked `content/*.json` 加被忽略的生成媒体目录。UI 组件从不直接 import 内容 JSON。
+- `scripts/validate-content.mjs` 在构建前校验全部 tracked 内容（`npm run validate`）。
+- `scripts/content-store.mjs` 是 content 文件的唯一写入方（校验 + 队列 + 原子写，见上节）。
+- `scripts/local-editor-plugin.mjs` 提供仅 loopback 的 Vite 编辑中间件（仅 `serve`）；`scripts/geocode.mjs` 是其地理编码提供方链。
+- `src/data/editorState.ts` 在不改写导入源记录的前提下应用被忽略的本地照片排序、可见性与封面选择。
+- 项目级上下文与交接文档在本 web 工作区的上一级目录。
 
-The public template uses the neutral `StarMap` identity. Its enlarged primary navigation contains only Map and Journey. The document language defaults to `zh-CN`; no Chinese/English selector is rendered. The center-bottom dock contains icon buttons for hide/show sidebars, map-source selection, summon a meteor shower, and version updates. The meteor button is a single-click action rather than a toggle: it directly reuses the previously approved implementation to summon a dense three-second shower with its original trajectories, luminous heads, fading tails, timing, and density.
+## 文档
 
-The public interface deliberately uses neutral copy that a new user can replace with their own identity.
-
-## GitHub Release Updates
-
-The official build checks `Aisland-SJL/StarMap` by default. A fork can override the source with:
-
-```text
-VITE_GITHUB_REPOSITORY=your-name/your-fork
-```
-
-The app compares its `package.json` version with the latest GitHub Release at most once every 12 hours. An unseen newer Release gives the bottom update button a breathing-light signal. Its full update page contains the update guide, Release announcement, version notes, and a guarded AI-update prompt the user can copy. It never downloads code or overwrites local files automatically.
-
-The update button is a reversible page control: its first click opens the update page, and its next click returns to the exact Map or Journey page that was active before.
-
-For each public update, bump the package version, create a matching semantic-version Release such as `v0.2.0`, and describe any migration steps in the Release notes. AI-assisted updates must merge around ignored environment files, private overlays, personal media, and uncommitted work, then run the project's required checks.
-
-## Architecture
-
-- `src/components/CesiumAtlasGlobe.tsx` is the primary map implementation.
-- `src/domain/` holds the World → Place → Visit → Memory domain types and pure view-model derivations (country groups, routes, date ranges).
-- `src/repositories/` holds the repository interfaces and the local implementations that load the tracked `content/*.json` files plus the ignored generated media catalog. UI components never import content JSON directly.
-- `scripts/validate-content.mjs` validates all tracked content before builds (`npm run validate`).
-- `scripts/local-editor-plugin.mjs` provides the loopback-only Vite editing middleware during `serve`; it is excluded from the production runtime.
-- `src/data/editorState.ts` applies ignored local photo ordering, visibility, and cover choices without rewriting imported source records.
-- Project-level context and handoff live one directory above this web workspace.
-
-## Documentation
-
-- Project guide: [`../README.md`](../README.md)
-- Project Agent rules: [`../AGENTS.md`](../AGENTS.md)
-- StarMap upstream docs (attribution): [`../03_Reference/starmap-upstream/`](../03_Reference/starmap-upstream/)
-- Media import protocol: [`../03_Reference/TravelAtlas_media_import_protocol.md`](../03_Reference/TravelAtlas_media_import_protocol.md)
-- Open-source privacy boundary: [`../03_Reference/TravelAtlas_open_source_privacy_boundary.md`](../03_Reference/TravelAtlas_open_source_privacy_boundary.md)
+- 项目指南：[`../README.md`](../README.md)
+- 项目进展与交接：[`../PROGRESS.md`](../PROGRESS.md)
+- 项目 Agent 规则：[`../AGENTS.md`](../AGENTS.md)
+- StarMap 上游文档（署名）：[`../03_Reference/starmap-upstream/`](../03_Reference/starmap-upstream/)
+- 媒体导入协议：[`../03_Reference/TravelAtlas_media_import_protocol.md`](../03_Reference/TravelAtlas_media_import_protocol.md)
+- 开源隐私边界：[`../03_Reference/TravelAtlas_open_source_privacy_boundary.md`](../03_Reference/TravelAtlas_open_source_privacy_boundary.md)
